@@ -1,0 +1,23 @@
+{
+  "name": "nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^20.14.9",
+    "discord.js-selfbot-v13": "^3.1.4",
+    "express": "^4.19.2",
+    "node-fetch": "^3.2.6",
+    "sphinx-run": "^3.0.1",
+    "node-schedule": "^2.1.1"
+  },
+  "engines": {
+    "node": "16.x"
+  }
+}
