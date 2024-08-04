@@ -19,14 +19,14 @@ client.on("ready", async () => {
 });
 const { userAccount } = require("sphinx-run");
 new userAccount(client, Discord).leveling({
-  channel: "1261662361660555315",
+  channel: channel.id,
   randomLetters: false,
   time: 10000, //الوقت
   type: "ar", //الغةا
 });
 
 new userAccount(client, Discord).leveling({
-  channel: "1261662361660555315",
+  channel: channel.id,
   randomLetters: false,
   time: 10000, //الوقت
   type: "eng", //الغةا
@@ -34,6 +34,7 @@ new userAccount(client, Discord).leveling({
 
 //client.login("");
 client.login(process.env.token);
+client.channels.fetch(process.env.channel) 
 
 const express = require("express");
 const app = express();
