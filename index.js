@@ -33,7 +33,7 @@ new userAccount(client, Discord).leveling({
 });
 
 //client.login("");
-//client.login(process.env.token);
+client.login(process.env.token);
 
 const express = require("express");
 const app = express();
