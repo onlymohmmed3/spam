@@ -1,13 +1,11 @@
 process.on('unhandledRejection', console.error);
 process.on('uncaughException', console.error);
 
-// استيراد وحدة التوقيت
 const schedule = require('node-schedule');
 
-// جدولة إعادة التشغيل كل ساعتين
-const restartJob = schedule.scheduleJob('0 */2 * * *', function() {
-    console.log('Restart');
-    // قم بإضافة الكود الخاص بإعادة تشغيل التطبيق هنا
+const restartJob = schedule.scheduleJob('*/30 * * * *', function() {
+    console.log('Restarting the project...');
+    // إضافة الكود الخاص بإعادة تشغيل البرنامج هنا
 });
 
 const Discord = require("discord.js-selfbot-v13");
