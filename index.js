@@ -24,7 +24,7 @@ new userAccount(client, Discord).leveling({
 });
 
 new userAccount(client, Discord).leveling({
-  channel: "1261662361660555315",
+  channel: "1246427655855804477",
   randomLetters: false,
   time: 10000, //الوقت
   type: "eng", //الغةا
