@@ -19,14 +19,14 @@ const { userAccount } = require("sphinx-run");
 new userAccount(client, Discord).leveling({
   channel: "1246427655855804477",
   randomLetters: false,
-  time: 10000, //الوقت
+  time: 12000, //الوقت
   type: "ar", //الغةا
 });
 
 new userAccount(client, Discord).leveling({
   channel: "1246427655855804477",
   randomLetters: false,
-  time: 10000, //الوقت
+  time: 12000, //الوقت
   type: "eng", //الغةا
 });
 
