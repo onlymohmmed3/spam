@@ -32,7 +32,7 @@ const { userAccount } = require("sphinx-run");
 
 // ===== leveling للحساب الأول =====
 new userAccount(client, Discord).leveling({
-  channel: "1246427655855804477",
+  channel: "1261662361660555315",
   randomLetters: false,
   time: 12000, //الوقت
   type: "ar", //الغةا
@@ -47,7 +47,7 @@ new userAccount(client, Discord).leveling({
 
 // ===== leveling للحساب الثاني (نفس الإعدادات) =====
 new userAccount(client2, Discord).leveling({
-  channel: "1246427655855804477",
+  channel: "1261662361660555315",
   randomLetters: false,
   time: 12000, //الوقت
   type: "ar", //الغةا
