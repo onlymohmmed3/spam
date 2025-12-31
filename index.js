@@ -6,163 +6,96 @@ const Discord = require("discord.js-selfbot-v13");
 const { userAccount } = require("sphinx-run");
 
 const app = express();
-const client1 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
-const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
+// تحسين: منع تكرار المستمعين لحل مشكلة الذاكرة
+process.setMaxListeners(0); 
 
-// --- Advanced System Monitoring State ---
-let systemStats = {
-    startTime: Date.now(),
-    totalMessages: 0,
-    dailyCount: 0,
-    logs: [],
-    // Management for Account 1
-    acc1: { name: "Account 1", ar: true, en: true, connected: false, messages: 0 },
-    // Management for Account 2
-    acc2: { name: "Account 2", ar: true, en: true, connected: false, messages: 0 }
+const client1 = new Discord.Client({ checkUpdate: false });
+const client2 = new Discord.Client({ checkUpdate: false });
+
+let stats = {
+    total: 0,
+    acc1: { online: false, ar: true, en: true },
+    acc2: { online: false, ar: true, en: true },
+    logs: []
 };
 
-function addLog(msg) {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: true });
-    systemStats.logs.unshift(`[${time}] ${msg}`);
-    if (systemStats.logs.length > 6) systemStats.logs.pop();
+function addLog(m) {
+    const t = new Date().toLocaleTimeString('en-US', { hour12: true });
+    stats.logs.unshift(`[${t}] ${m}`);
+    if (stats.logs.length > 5) stats.logs.pop();
 }
 
-// --- 1. Anti-Crash Memory Management ---
-setInterval(async () => {
-    const usedMemory = process.memoryUsage().heapUsed / 1024 / 1024;
-    if (usedMemory > 400) { // Safety threshold at 80% of 512MB
-        addLog("🚨 Critical: RAM Limit Reached! Restarting System...");
-        await triggerRenderRestart();
-    }
-}, 30000);
-
-async function triggerRenderRestart() {
+// نظام الرستات التلقائي لحماية الذاكرة (كل ساعة)
+schedule.scheduleJob('0 * * * *', async () => {
     try {
         await axios.post(`https://api.render.com/v1/services/${process.env.SERVICE_ID}/restart`, {}, {
             headers: { 'Authorization': `Bearer ${process.env.RENDER_API_KEY}` }
         });
-    } catch (e) { console.error("API Restart Failed"); }
-}
-
-// --- 4. Smart Leveling Engine (Stealth Mode) ---
-function createSmartRunner(bot, accConfig) {
-    const runner = new userAccount(bot, Discord);
-    
-    const sendLoop = (type, channelId, isActiveKey) => {
-        setInterval(() => {
-            if (accConfig.connected && accConfig[isActiveKey]) {
-                runner.leveling({
-                    channel: channelId,
-                    randomLetters: true,
-                    time: 12000 + Math.floor(Math.random() * 6000), // Human-like delay
-                    type: type
-                });
-                systemStats.totalMessages++;
-                systemStats.dailyCount++;
-                accConfig.messages++;
-                addLog(`${accConfig.name}: Sent ${type.toUpperCase()}`);
-            }
-        }, 19500); // Process cycle
-    };
-
-    sendLoop("ar", "1261662361660555315", "ar");
-    sendLoop("eng", "1246427655855804477", "en");
-}
-
-// --- Daily Webhook Report (12:00 AM) ---
-schedule.scheduleJob('0 0 * * *', async () => {
-    if (process.env.WEBHOOK_URL) {
-        try {
-            await axios.post(process.env.WEBHOOK_URL, {
-                embeds: [{
-                    title: "📊 SPAM-1 Ultimate Daily Report",
-                    color: 0x5865f2,
-                    fields: [
-                        { name: "Today's Messages", value: `${systemStats.dailyCount}`, inline: true },
-                        { name: "All-Time Total", value: `${systemStats.totalMessages}`, inline: true },
-                        { name: "System Uptime", value: `${Math.round((Date.now() - systemStats.startTime)/3600000)}h`, inline: true }
-                    ],
-                    timestamp: new Date()
-                }]
-            });
-            systemStats.dailyCount = 0; 
-        } catch (e) { console.error("Webhook Failed"); }
-    }
+    } catch (e) { console.log("Restart error"); }
 });
 
-// --- PRO Dashboard UI ---
+// محرك الإرسال الذكي (منع الانهيار)
+function startSafeLeveling(bot, config, name) {
+    const runner = new userAccount(bot, Discord);
+    
+    // تشغيل العربي
+    setInterval(() => {
+        if (config.online && config.ar) {
+            runner.leveling({ channel: "1261662361660555315", randomLetters: true, time: 15000, type: "ar" });
+            stats.total++;
+            addLog(`${name}: Sent AR`);
+        }
+    }, 20000);
+
+    // تشغيل الإنجليزي
+    setInterval(() => {
+        if (config.online && config.en) {
+            runner.leveling({ channel: "1246427655855804477", randomLetters: true, time: 15000, type: "eng" });
+            stats.total++;
+            addLog(`${name}: Sent EN`);
+        }
+    }, 22000);
+}
+
+// واجهة التحكم (Dashboard)
 app.get("/", (req, res) => {
-    const ramUsed = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    const ramPercent = Math.min((ramUsed / 512) * 100, 100);
-
-    const accountSection = (key) => {
-        const acc = systemStats[key];
-        return `
-        <div style="background: #1e232b; padding: 15px; border-radius: 10px; margin-bottom: 12px; border-right: 5px solid ${acc.connected ? '#43b581' : '#f04747'};">
-            <h3 style="margin:0 0 10px 0; color:#fff;">👤 ${acc.name} <small style="color:${acc.connected ? '#43b581' : '#f04747'}">${acc.connected ? 'ONLINE' : 'OFFLINE'}</small></h3>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn ${acc.ar ? 'on' : 'off'}" onclick="location.href='/toggle/${key}/ar'">AR: ${acc.ar ? 'ACTIVE' : 'OFF'}</button>
-                <button class="btn ${acc.en ? 'on' : 'off'}" onclick="location.href='/toggle/${key}/en'">EN: ${acc.en ? 'ACTIVE' : 'OFF'}</button>
-            </div>
-            <div style="font-size: 11px; margin-top:8px; color:#888;">Messages Sent: ${acc.messages}</div>
-        </div>`;
-    };
-
+    const ram = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>SPAM-1 ULTIMATE</title>
-        <style>
-            body { background: #0b0e14; color: #ccc; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-            .panel { background: #151921; padding: 25px; border-radius: 15px; width: 100%; max-width: 500px; box-shadow: 0 10px 40px #000; }
-            .btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; font-size: 11px; }
-            .on { background: #43b581; } .off { background: #f04747; }
-            .ram-container { background: #232931; border-radius: 5px; height: 18px; margin: 15px 0; overflow: hidden; position: relative; }
-            .ram-bar { background: #5865f2; height: 100%; width: ${ramPercent}%; transition: 0.8s; }
-            .logs { background: #000; color: #00ff00; padding: 10px; height: 110px; border-radius: 6px; font-size: 11px; font-family: monospace; overflow: hidden; margin-top: 15px; }
-            .btn-restart { background: #faa61a; width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        </style>
-    </head>
-    <body>
-        <div class="panel">
-            <h2 style="text-align:center; color:#5865f2; margin-top:0;">SPAM-1 ULTIMATE PRO</h2>
-            
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <span>Total: <b>${systemStats.totalMessages}</b></span>
-                <span>RAM: <b>${ramUsed}MB</b></span>
-            </div>
-            <div class="ram-container">
-                <div class="ram-bar"></div>
-            </div>
-
-            ${accountSection('acc1')}
-            ${accountSection('acc2')}
-
-            <div class="logs">${systemStats.logs.map(l => `<div>${l}</div>`).join('')}</div>
-            <button class="btn-restart" onclick="location.href='/restart'">🔄 FULL REBOOT SYSTEM</button>
+    <body style="background:#0b0e14; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
+        <h2 style="color:#5865f2;">SPAM-1 ULTIMATE PANEL</h2>
+        <div style="margin:20px; padding:15px; background:#151921; border-radius:10px;">
+            <p>RAM Usage: <b>${ram}MB / 512MB</b></p>
+            <p>Total Messages: <b>${stats.total}</b></p>
         </div>
-        <script>setTimeout(() => location.reload(), 9000);</script>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:500px; margin:auto;">
+            <div style="background:#1e232b; padding:10px; border-radius:8px;">
+                <h4>Account 1 (${stats.acc1.online ? 'ON' : 'OFF'})</h4>
+                <button onclick="location.href='/t/acc1/ar'">AR: ${stats.acc1.ar ? 'ON' : 'OFF'}</button>
+                <button onclick="location.href='/t/acc1/en'">EN: ${stats.acc1.en ? 'ON' : 'OFF'}</button>
+            </div>
+            <div style="background:#1e232b; padding:10px; border-radius:8px;">
+                <h4>Account 2 (${stats.acc2.online ? 'ON' : 'OFF'})</h4>
+                <button onclick="location.href='/t/acc2/ar'">AR: ${stats.acc2.ar ? 'ON' : 'OFF'}</button>
+                <button onclick="location.href='/t/acc2/en'">EN: ${stats.acc2.en ? 'ON' : 'OFF'}</button>
+            </div>
+        </div>
+        <div style="background:#000; color:#00ff00; padding:10px; margin-top:20px; font-family:monospace; font-size:12px; height:100px; overflow:hidden;">
+            ${stats.logs.map(l => `<div>${l}</div>`).join('')}
+        </div>
+        <script>setTimeout(()=>location.reload(), 10000);</script>
     </body>
-    </html>
     `);
 });
 
-// --- Control API Routes ---
-app.get("/toggle/:acc/:type", (req, res) => {
+app.get("/t/:acc/:type", (req, res) => {
     const { acc, type } = req.params;
-    if (systemStats[acc]) systemStats[acc][type] = !systemStats[acc][type];
+    stats[acc][type] = !stats[acc][type];
     res.redirect("/");
 });
 
-app.get("/restart", async (req, res) => {
-    await triggerRenderRestart();
-    res.send("<body style='background:#000;color:#fff;text-align:center;'><h1>Rebooting... Please Wait</h1></body>");
-});
-
-// --- Bot Initialization ---
-client1.on("ready", () => { systemStats.acc1.connected = true; addLog("Acc 1 Connected"); createSmartRunner(client1, systemStats.acc1); });
-client2.on("ready", () => { systemStats.acc2.connected = true; addLog("Acc 2 Connected"); createSmartRunner(client2, systemStats.acc2); });
+// تسجيل الدخول
+client1.on("ready", () => { stats.acc1.online = true; addLog("Acc 1 Ready"); startSafeLeveling(client1, stats.acc1, "Acc 1"); });
+client2.on("ready", () => { stats.acc2.online = true; addLog("Acc 2 Ready"); startSafeLeveling(client2, stats.acc2, "Acc 2"); });
 
 client1.login(process.env.token);
 client2.login(process.env.token2);
