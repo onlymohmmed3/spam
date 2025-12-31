@@ -1,58 +1,84 @@
-process.on('unhandledRejection', console.error);
-process.on('uncaughtException', console.error);
+// حماية البوت من التوقف عند حدوث أخطاء برمجية مفاجئة
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception thrown:', err);
+});
 
 const schedule = require('node-schedule');
-const axios = require('axios'); // تأكد من تشغيل: npm install axios
+const axios = require('axios'); 
 const Discord = require("discord.js-selfbot-v13");
 const { userAccount } = require("sphinx-run");
 const express = require("express");
 
-// ================= إعدادات إعادة التشغيل (Render API) =================
-const RENDER_KEY = "rnd_7EdRVrZpeAYJlikDKmJvu5m5E2QW";
-const RESTART_URL = "https://api.render.com/v1/services/srv-d4smmtngj27c73bpo15g/restart";
+// ================= إعدادات RENDER النهائية =================
+const RENDER_API_KEY = "rnd_7EdRVrZpeAYJlikDKmJvu5m5E2QW"; 
+const SERVICE_ID = "srv-d4smmtngi27c73bpo15g"; // المعرف الذي تم تأكيده
+const RESTART_URL = `https://api.render.com/v1/services/${SERVICE_ID}/restart`;
 
-// جدولة إعادة التشغيل كل 30 دقيقة
+// وظيفة إعادة التشغيل التلقائي كل 30 دقيقة
 schedule.scheduleJob('*/30 * * * *', async function() {
-    console.log('--- بدأت عملية إعادة تشغيل الخدمة عبر API ---');
+    console.log('--- [API] جاري بدء عملية إعادة التشغيل المجدولة ---');
     try {
         await axios.post(RESTART_URL, {}, {
             headers: {
-                'Authorization': `Bearer ${RENDER_KEY}`,
-                'Accept': 'application/json'
+                'Authorization': `Bearer ${RENDER_API_KEY}`,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
         });
-        console.log('✅ تم إرسال الطلب بنجاح، سيقوم Render بإعادة التشغيل الآن.');
+        console.log('✅ [API] تم إرسال طلب إعادة التشغيل لـ Render بنجاح.');
     } catch (error) {
-        console.error('❌ خطأ في API:', error.response ? error.response.statusText : error.message);
+        console.error('❌ [API] فشل طلب إعادة التشغيل:', error.response ? error.response.data : error.message);
     }
 });
+// =========================================================
 
-// ================= إعداد الحسابات (Selfbots) =================
+// إعداد حسابات الديسكورد
 const client1 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
 const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
 
-client1.on("ready", () => console.log(`${client1.user.username} (1) Ready!`));
-client2.on("ready", () => console.log(`${client2.user.username} (2) Ready!`));
-
-function runLeveling(client) {
+// دالة تشغيل الـ Leveling
+function startLeveling(botClient) {
     const channels = ["1261662361660555315", "1246427655855804477"];
-    channels.forEach(ch => {
-        new userAccount(client, Discord).leveling({
-            channel: ch,
+    channels.forEach(chID => {
+        new userAccount(botClient, Discord).leveling({
+            channel: chID,
             randomLetters: false,
             time: 12000,
-            type: ch === "1261662361660555315" ? "ar" : "eng"
+            type: chID === "1261662361660555315" ? "ar" : "eng"
         });
     });
 }
 
-runLeveling(client1);
-runLeveling(client2);
+client1.on("ready", () => {
+    console.log(`✅ ${client1.user.username} (Account 1) Ready!`);
+    startLeveling(client1);
+});
 
+client2.on("ready", () => {
+    console.log(`✅ ${client2.user.username} (Account 2) Ready!`);
+    startLeveling(client2);
+});
+
+// تسجيل الدخول باستخدام التوكنات من البيئة (Environment Variables)
 client1.login(process.env.token);
 client2.login(process.env.token2);
 
-// ================= إعداد سيرفر الويب للبقاء حياً =================
+// ================= إعداد سيرفر ويب للبقاء حياً =================
 const app = express();
-app.get("/", (req, res) => res.send("Bot is Online & Auto-Restart is Active"));
-app.listen(process.env.PORT || 2000, () => console.log("Web Server Ready"));
+app.get("/", (req, res) => {
+    res.send(`
+        <body style="background-color: #1a1a1a; color: white; font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h1>🤖 Bot is Running 24/7</h1>
+            <p>Auto-Restart Status: <span style="color: #00ff00;">Active (Every 30 Mins)</span></p>
+            <p>Service ID: ${SERVICE_ID}</p>
+        </body>
+    `);
+});
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+    console.log(`🚀 Web Server is running on port ${PORT}`);
+});
