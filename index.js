@@ -7,16 +7,15 @@ const express = require("express");
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-// --- نظام العدادات ---
+// --- Data & Statistics ---
 let stats = {
-    c1: { total: 0, ar: 0, en: 0, name: "Account 1" },
-    c2: { total: 0, ar: 0, en: 0, name: "Account 2" }
+    c1: { total: 0, ar: 0, en: 0, name: "Connecting..." },
+    c2: { total: 0, ar: 0, en: 0, name: "Connecting..." }
 };
 
 const client = new Discord.Client({ checkUpdate: false });
 const client2 = new Discord.Client({ checkUpdate: false });
 
-// دالة تتبع الرسائل بدقة
 const trackMessage = (msg, botKey) => {
     if (msg.author.id === (botKey === 'c1' ? client.user.id : client2.user.id)) {
         stats[botKey].total++;
@@ -28,13 +27,13 @@ const trackMessage = (msg, botKey) => {
 client.on("messageCreate", (msg) => trackMessage(msg, 'c1'));
 client2.on("messageCreate", (msg) => trackMessage(msg, 'c2'));
 
-client.on("ready", async () => {
+client.on("ready", () => {
     stats.c1.name = client.user.username;
     new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
     new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 13000, type: "eng" });
 });
 
-client2.on("ready", async () => {
+client2.on("ready", () => {
     stats.c2.name = client2.user.username;
     setTimeout(() => {
         new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 13500, type: "ar" });
@@ -45,27 +44,17 @@ client2.on("ready", async () => {
 client.login(process.env.token);
 client2.login(process.env.token2);
 
-// --- واجهة الويب والتحكم ---
 const startTime = Date.now();
 const app = express();
 app.use(express.json());
 
-app.get("/api/data", (req, res) => {
-    const s = Math.floor((Date.now() - startTime) / 1000);
-    res.json({
-        uptime: { d: Math.floor(s/86400), h: Math.floor((s%86400)/3600), m: Math.floor((s%3600)/60), s: s%60 },
-        stats: stats
-    });
-});
-
-// تصفير العدادات
+// API Endpoints
 app.post("/api/reset", (req, res) => {
     stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0 };
     stats.c2 = { ...stats.c2, total: 0, ar: 0, en: 0 };
     res.json({ success: true });
 });
 
-// إعادة تشغيل النظام
 app.post("/api/restart", async (req, res) => {
     const key = process.env.RENDER_API_KEY;
     const id = process.env.SERVICE_ID;
@@ -75,71 +64,126 @@ app.post("/api/restart", async (req, res) => {
     res.json({ success: true });
 });
 
+app.get("/api/data", (req, res) => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    res.json({ uptime: { d: Math.floor(s/86400), h: Math.floor((s%86400)/3600), m: Math.floor((s%3600)/60), s: s%60 }, stats });
+});
+
 app.get("/", (req, res) => {
     res.send(`
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Spam Pro | Dashboard</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+        <title>SPAM PRO | System Dashboard</title>
         <style>
-            body { margin: 0; background: #05050a; color: white; font-family: 'Inter', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; }
-            .container { width: 90%; max-width: 800px; text-align: center; }
-            .badge { color: #00ff88; font-size: 0.7rem; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
-            #uptime { font-size: 3rem; font-weight: bold; margin: 10px 0 30px 0; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-            .card { background: rgba(255,255,255,0.03); padding: 25px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05); }
-            .main-val { font-size: 3.5rem; font-weight: bold; color: #00d4ff; margin: 10px 0; }
-            .sub-row { display: flex; justify-content: space-around; font-size: 0.8rem; color: #555; border-top: 1px solid #111; padding-top: 10px; }
-            .sub-row b { color: #fff; }
-            .actions { margin-top: 30px; display: flex; gap: 15px; justify-content: center; }
-            .btn { padding: 12px 25px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 0.8rem; }
-            .btn-reset { background: rgba(255,255,255,0.05); color: #fff; border: 1px solid #222; }
-            .btn-reset:hover { background: #ff4444; color: #000; border-color: #ff4444; }
-            .btn-restart { background: #00d4ff; color: #000; }
-            .btn-restart:hover { box-shadow: 0 0 20px rgba(0, 212, 255, 0.4); }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                height: 100vh; display: flex; align-items: center; justify-content: center;
+                background: radial-gradient(circle at top right, #3d1a5c, #0d0d2b, #050505);
+                background-size: 400% 400%; animation: aurora 15s ease infinite;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                overflow: hidden; color: #fff;
+            }
+            @keyframes aurora { 0% {background-position: 0% 50%;} 50% {background-position: 100% 50%;} 100% {background-position: 0% 50%;} }
+
+            .glass-container {
+                background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(30px);
+                border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 40px;
+                width: 90%; max-width: 800px; padding: 60px 20px;
+                text-align: center; box-shadow: 0 40px 100px rgba(0,0,0,0.8);
+            }
+
+            .header-label { color: rgba(255, 255, 255, 0.4); font-size: 0.75rem; letter-spacing: 6px; text-transform: uppercase; margin-bottom: 10px; }
+            .uptime-clock { font-size: 4.5rem; font-weight: 800; margin-bottom: 45px; letter-spacing: -1.5px; }
+            
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 45px; }
+            .card {
+                background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 25px; padding: 30px 15px; transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+            .card:hover { transform: scale(1.02); background: rgba(255, 255, 255, 0.05); border-color: #00d4ff; }
+            
+            .acc-id { color: #00d4ff; font-size: 0.75rem; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 15px; }
+            .counter { font-size: 4.5rem; font-weight: 800; line-height: 1; margin-bottom: 8px; }
+            .msg-label { font-size: 0.8rem; color: rgba(255, 255, 255, 0.3); margin-bottom: 20px; }
+            
+            .node-info { display: flex; justify-content: center; gap: 15px; font-size: 0.8rem; font-weight: 600; }
+            .node-info span { color: #00d4ff; margin-left: 4px; }
+
+            .footer-actions { display: flex; gap: 15px; justify-content: center; }
+            .btn {
+                padding: 14px 35px; border-radius: 15px; font-size: 0.85rem; font-weight: bold;
+                cursor: pointer; transition: 0.3s; border: none; text-transform: uppercase; letter-spacing: 1px;
+            }
+            .btn-reset { 
+                background: transparent; color: #ff4757; border: 1px solid #ff4757;
+            }
+            .btn-reset:hover { background: #ff4757; color: #fff; box-shadow: 0 0 20px rgba(255, 71, 87, 0.3); }
+            
+            .btn-restart {
+                background: #fff; color: #000;
+            }
+            .btn-restart:hover { background: #00d4ff; box-shadow: 0 0 25px rgba(0, 212, 255, 0.4); }
+
         </style>
     </head>
     <body>
-        <div class="container">
-            <div class="badge">System Operational</div>
-            <div id="uptime">0d 0h 0m 0s</div>
+        <div class="glass-container">
+            <div class="header-label">System Runtime</div>
+            <div class="uptime-clock" id="uptime">0d 0h 0m 0s</div>
+
             <div class="grid">
                 <div class="card">
-                    <div id="n1" style="font-size:0.9rem; color:#666;">Account 1</div>
-                    <div class="main-val" id="t1">0</div>
-                    <div class="sub-row"><div>AR: <b id="a1">0</b></div><div>EN: <b id="e1">0</b></div></div>
+                    <div class="acc-id" id="n1">ACCOUNT 1</div>
+                    <div class="counter" id="t1">0</div>
+                    <div class="msg-label">Total Messages</div>
+                    <div class="node-info">
+                        <div>AR: <span id="a1">0</span></div>
+                        <div>EN: <span id="e1">0</span></div>
+                    </div>
                 </div>
+
                 <div class="card">
-                    <div id="n2" style="font-size:0.9rem; color:#666;">Account 2</div>
-                    <div class="main-val" id="t2">0</div>
-                    <div class="sub-row"><div>AR: <b id="a2">0</b></div><div>EN: <b id="e2">0</b></div></div>
+                    <div class="acc-id" id="n2">ACCOUNT 2</div>
+                    <div class="counter" id="t2">0</div>
+                    <div class="msg-label">Total Messages</div>
+                    <div class="node-info">
+                        <div>AR: <span id="a2">0</span></div>
+                        <div>EN: <span id="e2">0</span></div>
+                    </div>
                 </div>
             </div>
-            <div class="actions">
-                <button class="btn btn-reset" onclick="doAction('reset')">RESET COUNTERS</button>
-                <button class="btn btn-restart" onclick="doAction('restart')">RESTART SYSTEM</button>
+
+            <div class="footer-actions">
+                <button class="btn btn-reset" onclick="trigger('reset')">Reset Counters</button>
+                <button class="btn btn-restart" onclick="trigger('restart')">Restart System</button>
             </div>
         </div>
+
         <script>
-            async function doAction(type) {
+            async function trigger(type) {
                 if(!confirm('Are you sure you want to ' + type + '?')) return;
                 await fetch('/api/' + type, { method: 'POST' });
+                if(type === 'restart') alert('System is restarting, please wait...');
                 location.reload();
             }
-            async function update() {
-                const r = await fetch('/api/data');
-                const d = await r.json();
-                document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
-                ['c1', 'c2'].forEach((b, i) => {
-                    document.getElementById('n'+(i+1)).innerText = d.stats[b].name;
-                    document.getElementById('t'+(i+1)).innerText = d.stats[b].total;
-                    document.getElementById('a'+(i+1)).innerText = d.stats[b].ar;
-                    document.getElementById('e'+(i+1)).innerText = d.stats[b].en;
-                });
-            }
-            setInterval(update, 1000);
+
+            setInterval(async () => {
+                try {
+                    const r = await fetch('/api/data');
+                    const d = await r.json();
+                    document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
+                    
+                    ['c1', 'c2'].forEach((b, i) => {
+                        const idx = i + 1;
+                        document.getElementById('n'+idx).innerText = d.stats[b].name;
+                        document.getElementById('t'+idx).innerText = d.stats[b].total;
+                        document.getElementById('a'+idx).innerText = d.stats[b].ar;
+                        document.getElementById('e'+idx).innerText = d.stats[b].en;
+                    });
+                } catch(e) {}
+            }, 1000);
         </script>
     </body>
     </html>
