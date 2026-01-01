@@ -1,131 +1,220 @@
 require('dotenv').config();
 const Discord = require("discord.js-selfbot-v13");
 const { userAccount } = require("sphinx-run");
-const schedule = require('node-schedule');
 const axios = require('axios');
 const express = require("express");
 
-// --- 1. إعداد الحسابات (نفس الهيكلية الناجحة) ---
-const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
-const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
-
+const startTime = Date.now();
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-client.on("ready", async () => { console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`); });
-client2.on("ready", async () => { console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`); });
+// نظام الحالة والتحكم
+let logs = [];
+let botConfigs = {
+    c1: { ar: true, en: true, active: true, instance: null },
+    c2: { ar: true, en: true, active: true, instance: null }
+};
 
-// تفعيل الليفلينج (Leveling) بنفس الطريقة التي نجحت
-new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
-new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
+let stats = {
+    c1: { ar: 0, en: 0, total: 0, name: "Acc 1" },
+    c2: { ar: 0, en: 0, total: 0, name: "Acc 2" }
+};
 
-new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
-new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
+const addLog = (msg) => {
+    const time = new Date().toLocaleTimeString();
+    logs.unshift(`[${time}] ${msg}`);
+    if (logs.length > 25) logs.pop();
+};
 
-// تسجيل الدخول
-client.login(process.env.token);
+const client1 = new Discord.Client({ checkUpdate: false });
+const client2 = new Discord.Client({ checkUpdate: false });
+
+// دالة تشغيل/تحديث الليفلينج
+function updateLeveling(clientNum) {
+    const conf = botConfigs[`c${clientNum}`];
+    const client = clientNum === 1 ? client1 : client2;
+    
+    if (!conf.active || !client.isReady()) return;
+
+    // إعادة إنشاء المثيل (Instance) لتحديث الإعدادات
+    const runner = new userAccount(client, Discord);
+    
+    if (conf.ar) {
+        runner.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
+        addLog(`Acc ${clientNum}: Arabic Node Started`);
+    }
+    if (conf.en) {
+        runner.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
+        addLog(`Acc ${clientNum}: English Node Started`);
+    }
+}
+
+client1.on("ready", () => { stats.c1.name = client1.user.username; addLog("Acc 1 Online"); updateLeveling(1); });
+client2.on("ready", () => { stats.c2.name = client2.user.username; addLog("Acc 2 Online"); setTimeout(() => updateLeveling(2), 5000); });
+
+// تتبع الإحصائيات
+const track = (m, acc) => {
+    if (m.author.id === (acc === 1 ? client1.user.id : client2.user.id)) {
+        stats[`c${acc}`].total++;
+        if (m.channelId === CH_AR) stats[`c${acc}`].ar++;
+        if (m.channelId === CH_EN) stats[`c${acc}`].en++;
+    }
+};
+
+client1.on("messageCreate", (m) => track(m, 1));
+client2.on("messageCreate", (m) => track(m, 2));
+
+client1.login(process.env.token);
 client2.login(process.env.token2);
 
-// --- 2. واجهة الويب الاحترافية (التصميم النهائي) ---
-const startTime = Date.now();
+// --- الواجهة ولوحة التحكم ---
 const app = express();
+app.use(express.json());
 
 app.get("/api/data", (req, res) => {
-    const s = Math.floor((Date.now() - startTime) / 1000);
-    res.json({
-        uptime: {
-            d: Math.floor(s / 86400),
-            h: Math.floor((s % 86400) / 3600),
-            m: Math.floor((s % 3600) / 60),
-            s: s % 60
-        },
-        c1: { name: client.user ? client.user.username : "Connecting...", status: client.isReady() },
-        c2: { name: client2.user ? client2.user.username : "Connecting...", status: client2.isReady() }
-    });
+    res.json({ uptime: Math.floor((Date.now() - startTime) / 1000), stats, configs: botConfigs, status: { c1: client1.isReady(), c2: client2.isReady() }, logs });
+});
+
+// استقبال أوامر التحكم من الواجهة
+app.post("/api/toggle", (req, res) => {
+    const { bot, type } = req.body; // bot: c1/c2, type: ar/en/active
+    botConfigs[bot][type] = !botConfigs[bot][type];
+    addLog(`Control: ${bot} ${type} toggled to ${botConfigs[bot][type]}`);
+    
+    // ملاحظة: مكتبة sphinx-run لا تدعم الإيقاف اللحظي بدون ريستارت
+    // لذلك نوجه المستخدم لعمل ريستارت للسيرفر لتطبيق التغييرات
+    res.json({ success: true });
+});
+
+app.post("/api/restart-server", (req, res) => {
+    const key = process.env.RENDER_API_KEY;
+    const id = process.env.SERVICE_ID;
+    if (key && id) axios.post(`https://api.render.com/v1/services/${id}/restart`, {}, { headers: { 'Authorization': `Bearer ${key}` } });
+    res.json({ success: true });
 });
 
 app.get("/", (req, res) => {
     res.send(`
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <title>Control Center</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+        <title>Zenon Command Center</title>
         <style>
-            body { 
-                margin: 0; background: #020205; color: white; font-family: 'Inter', sans-serif;
-                height: 100vh; display: flex; align-items: center; justify-content: center;
-                background: radial-gradient(circle at 50% 50%, #0a0a25 0%, #020205 100%);
+            :root { --bg: #050508; --card: #0f0f1a; --primary: #00f2ff; --accent: #00ff8c; }
+            body { margin: 0; background: var(--bg); color: #fff; font-family: 'Inter', sans-serif; display: grid; grid-template-columns: 1fr 350px; height: 100vh; }
+            
+            .main { padding: 40px; overflow-y: auto; }
+            .side { background: #080810; border-left: 1px solid #1a1a25; padding: 20px; display: flex; flex-direction: column; }
+            
+            .bot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
+            .card { background: var(--card); border-radius: 25px; padding: 30px; border: 1px solid #1a1a25; }
+            
+            .control-group { margin-top: 25px; display: flex; flex-direction: column; gap: 10px; }
+            .toggle-btn { 
+                display: flex; justify-content: space-between; align-items: center; 
+                padding: 12px 20px; border-radius: 15px; background: #151525; cursor: pointer;
+                transition: 0.3s; border: 1px solid transparent;
             }
-            .container {
-                width: 90%; max-width: 650px; background: rgba(255, 255, 255, 0.02);
-                padding: 40px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.08);
-                backdrop-filter: blur(20px); text-align: center; box-shadow: 0 40px 80px rgba(0,0,0,0.7);
+            .toggle-btn.active { border-color: var(--primary); background: rgba(0, 242, 255, 0.05); }
+            .toggle-btn:hover { background: #1a1a30; }
+            
+            .restart-all { 
+                width: 100%; margin-top: 20px; padding: 15px; border-radius: 15px; 
+                background: var(--primary); color: #000; font-weight: bold; border: none; cursor: pointer;
             }
-            .status-badge { background: rgba(0, 255, 136, 0.1); color: #00ff88; padding: 6px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: bold; border: 1px solid rgba(0, 255, 136, 0.2); letter-spacing: 1px; }
-            h1 { font-size: 0.8rem; color: #555; text-transform: uppercase; letter-spacing: 3px; margin: 25px 0 5px 0; }
-            #uptime { font-size: 3.2rem; font-weight: bold; margin-bottom: 30px; color: #fff; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-            .card { background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.05); }
-            .card h3 { font-size: 0.7rem; color: #444; margin: 0 0 10px 0; text-transform: uppercase; }
-            .user-name { font-size: 1.1rem; font-weight: bold; color: #00d4ff; display: block; margin-bottom: 5px; }
-            .stat-label { font-size: 0.7rem; font-weight: bold; letter-spacing: 1px; }
-            .online { color: #00ff88; }
-            .offline { color: #ff4444; }
+
+            .stat-val { font-size: 3rem; font-weight: 800; color: var(--primary); }
+            .log-msg { font-size: 0.75rem; color: #667; margin-bottom: 8px; font-family: monospace; border-bottom: 1px solid #111; padding-bottom: 4px; }
+            .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
         </style>
     </head>
     <body>
-        <div class="container">
-            <span class="status-badge">SYSTEM OPERATIONAL</span>
-            <h1>Total Running Time</h1>
-            <div id="uptime">0d 0h 0m 0s</div>
-            <div class="grid">
+        <div class="main">
+            <h1 style="margin-top:0">Command <span style="color:var(--primary)">Center</span></h1>
+            
+            <div class="bot-grid">
                 <div class="card">
-                    <h3>Account 1</h3>
-                    <span class="user-name" id="n1">Loading...</span>
-                    <span class="stat-label" id="s1">OFFLINE</span>
+                    <div style="display:flex; justify-content:space-between">
+                        <h2 id="n1">Acc 1</h2>
+                        <span id="s1" style="font-size:0.7rem">● OFFLINE</span>
+                    </div>
+                    <div class="stat-val" id="t1">0</div>
+                    
+                    <div class="control-group">
+                        <div class="toggle-btn" id="btn-c1-active" onclick="toggle('c1', 'active')"><span>System Power</span><small id="st-c1-active">ON</small></div>
+                        <div class="toggle-btn" id="btn-c1-ar" onclick="toggle('c1', 'ar')"><span>Arabic Node</span><small id="st-c1-ar">ON</small></div>
+                        <div class="toggle-btn" id="btn-c1-en" onclick="toggle('c1', 'en')"><span>English Node</span><small id="st-c1-en">ON</small></div>
+                    </div>
                 </div>
+
                 <div class="card">
-                    <h3>Account 2</h3>
-                    <span class="user-name" id="n2">Loading...</span>
-                    <span class="stat-label" id="s2">OFFLINE</span>
+                    <div style="display:flex; justify-content:space-between">
+                        <h2 id="n2">Acc 2</h2>
+                        <span id="s2" style="font-size:0.7rem">● OFFLINE</span>
+                    </div>
+                    <div class="stat-val" id="t2" style="color:var(--accent)">0</div>
+                    
+                    <div class="control-group">
+                        <div class="toggle-btn" id="btn-c2-active" onclick="toggle('c2', 'active')"><span>System Power</span><small id="st-c2-active">ON</small></div>
+                        <div class="toggle-btn" id="btn-c2-ar" onclick="toggle('c2', 'ar')"><span>Arabic Node</span><small id="st-c2-ar">ON</small></div>
+                        <div class="toggle-btn" id="btn-c2-en" onclick="toggle('c2', 'en')"><span>English Node</span><small id="st-c2-en">ON</small></div>
+                    </div>
                 </div>
             </div>
+            
+            <button class="restart-all" onclick="applyChanges()">APPLY CHANGES & RESTART SERVER</button>
+            <p style="color:#445; font-size:0.8rem; text-align:center;">* Applying changes will restart the service to update bot tasks.</p>
         </div>
+
+        <div class="side">
+            <h3 style="letter-spacing:2px; color:#334; font-size:0.8rem">LIVE SYSTEM LOGS</h3>
+            <div id="logs" style="overflow-y:auto; flex:1"></div>
+        </div>
+
         <script>
-            async function sync() {
-                try {
-                    const res = await fetch('/api/data');
-                    const d = await res.json();
-                    document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
-                    document.getElementById('n1').innerText = d.c1.name;
-                    document.getElementById('s1').innerText = d.c1.status ? "ONLINE" : "OFFLINE";
-                    document.getElementById('s1').className = d.c1.status ? "stat-label online" : "stat-label offline";
-                    document.getElementById('n2').innerText = d.c2.name;
-                    document.getElementById('s2').innerText = d.c2.status ? "ONLINE" : "OFFLINE";
-                    document.getElementById('s2').className = d.c2.status ? "stat-label online" : "stat-label offline";
-                } catch (e) {}
+            async function toggle(bot, type) {
+                await fetch('/api/toggle', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({bot, type})
+                });
+                updateUI();
             }
-            setInterval(sync, 1000);
+
+            async function applyChanges() {
+                if(confirm('Restart server to apply new configuration?')) {
+                    await fetch('/api/restart-server', {method: 'POST'});
+                    alert('Server is restarting... please wait 1 minute.');
+                }
+            }
+
+            async function updateUI() {
+                const r = await fetch('/api/data');
+                const d = await r.json();
+                
+                // Update Stats
+                ['c1', 'c2'].forEach(b => {
+                    document.getElementById('n'+(b=='c1'?1:2)).innerText = d.stats[b].name;
+                    document.getElementById('t'+(b=='c1'?1:2)).innerText = d.stats[b].total;
+                    document.getElementById('s'+(b=='c1'?1:2)).innerText = d.status[b] ? "● ONLINE" : "● OFFLINE";
+                    document.getElementById('s'+(b=='c1'?1:2)).style.color = d.status[b] ? "#00ff8c" : "#ff4444";
+                    
+                    // Update Toggle Buttons
+                    ['active', 'ar', 'en'].forEach(type => {
+                        const btn = document.getElementById('btn-'+b+'-'+type);
+                        const state = d.configs[b][type];
+                        btn.className = state ? "toggle-btn active" : "toggle-btn";
+                        document.getElementById('st-'+b+'-'+type).innerText = state ? "ON" : "OFF";
+                    });
+                });
+
+                document.getElementById('logs').innerHTML = d.logs.map(l => '<div class="log-msg">'+l+'</div>').join('');
+            }
+            setInterval(updateUI, 1500);
         </script>
     </body>
     </html>
     `);
-});
-
-// --- 3. نظام الريستارت التلقائي ---
-schedule.scheduleJob('0 * * * *', async () => {
-    const key = process.env.RENDER_API_KEY;
-    const id = process.env.SERVICE_ID;
-    if (key && id) {
-        try { 
-            await axios.post(`https://api.render.com/v1/services/${id}/restart`, {}, { 
-                headers: { 'Authorization': `Bearer ${key}` } 
-            }); 
-            console.log("Auto-Restart executed successfully.");
-        } catch (e) { console.error("Restart Error"); }
-    }
 });
 
 app.listen(process.env.PORT || 2000);
