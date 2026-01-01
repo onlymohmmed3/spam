@@ -8,18 +8,10 @@ const express = require("express");
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const startTime = Date.now();
 
-// ===== نظام الإحصائيات المتقدم =====
+// ===== نظام الإحصائيات المتكامل =====
 let stats = {
-    daily: {
-        msg: { c1: 0, c2: 0 },
-        xp: { c1: 0, c2: 0 },
-        words: { c1: 0, c2: 0 },
-        channels: { ar: 0, eng: 0 }
-    },
-    monthly: {
-        msg: { c1: 0, c2: 0 },
-        xp: { c1: 0, c2: 0 }
-    }
+    daily: { msg: { c1: 0, c2: 0 }, words: { c1: 0, c2: 0 }, channels: { ar: 0, eng: 0 } },
+    monthly: { msg: { c1: 0, c2: 0 } }
 };
 
 const getUptime = () => {
@@ -30,123 +22,120 @@ const getUptime = () => {
     return `${days}d ${hours}h ${minutes}m`;
 };
 
-const drawBar = (current, total) => {
-    const size = 10;
-    const totalVal = total === 0 ? 1 : total;
-    const progress = Math.min(Math.round((size * current) / totalVal), size);
-    return `\`[${"■".repeat(progress)}${"□".repeat(size - progress)}]\` ${Math.round((current / totalVal) * 100)}%`;
-};
+const calcXP = (m) => Math.floor(m * 0.85 * 20); // نظام برو بوت الدقيق
 
 async function sendStats(type = "DAILY") {
-    if (!WEBHOOK_URL) return console.log("❌ Error: WEBHOOK_URL is not defined in .env");
-
-    const isMonthly = type === "MONTHLY" || type === "TEST";
-    const data = isMonthly && type !== "TEST" ? stats.monthly : stats.daily;
+    if (!WEBHOOK_URL) return;
+    const isMonthly = type === "MONTHLY";
+    const data = isMonthly ? stats.monthly : stats.daily;
     const totalMsgs = data.msg.c1 + data.msg.c2;
-    const totalXP = data.xp.c1 + data.xp.c2;
+    const totalXP = calcXP(data.msg.c1) + calcXP(data.msg.c2);
 
     const embed = {
-        title: `📊 ${type} ANALYTICS DASHBOARD`,
-        color: type === "TEST" ? 0x3498db : (isMonthly ? 0xD4AF37 : 0x2ecc71),
-        description: `### System Performance Report\n**Status:** \`TESTING MODE\`\n**Time:** \`${new Date().toLocaleString()}\``,
+        title: `📊 ${type} ANALYTICS REPORT`,
+        color: isMonthly ? 0xD4AF37 : 0x00D4FF,
+        description: `### System Status: \`ACTIVE\`\n**Time:** \`${new Date().toUTCString()}\``,
         fields: [
-            { 
-                name: "📈 General Metrics", 
-                value: `• **Total Messages:** \`${totalMsgs}\`\n• **Estimated XP:** \`${totalXP}\` ✨\n• **Total Words:** \`${data.words.c1 + data.words.c2}\` 📝`, 
-                inline: false 
-            },
-            { 
-                name: "👤 Account 1 Activity", 
-                value: `${drawBar(data.msg.c1, totalMsgs)}\n\`${data.msg.c1}\` Messages sent`, 
-                inline: true 
-            },
-            { 
-                name: "👤 Account 2 Activity", 
-                value: `${drawBar(data.msg.c2, totalMsgs)}\n\`${data.msg.c2}\` Messages sent`, 
-                inline: true 
-            },
-            { 
-                name: "🌐 Channels", 
-                value: `• Arabic: \`${data.channels.ar}\`\n• English: \`${data.channels.eng}\``, 
-                inline: true 
-            },
-            { 
-                name: "🛠️ System Status", 
-                value: `• Uptime: \`${getUptime()}\` \n• RAM: \`${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB\``, 
-                inline: true 
-            }
+            { name: "📈 Overview", value: `• Total Messages: \`${totalMsgs}\` \n• Estimated XP: \`${totalXP}\` ✨`, inline: false },
+            { name: "👤 Account 1", value: `\`${data.msg.c1}\` msgs`, inline: true },
+            { name: "👤 Account 2", value: `\`${data.msg.c2}\` msgs`, inline: true },
+            { name: "⚙️ Resources", value: `• Uptime: \`${getUptime()}\` \n• RAM: \`${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB\``, inline: true }
         ],
-        footer: { text: "Sphinx-Run Monitoring System • Testing Active" },
+        footer: { text: "Sphinx Analytics Pro v5.0" },
         timestamp: new Date()
     };
 
     try {
         await axios.post(WEBHOOK_URL, { embeds: [embed] });
-        console.log(`✅ ${type} Webhook Sent Successfully!`);
-    } catch (err) { 
-        console.error("❌ Webhook Error: " + (err.response ? err.response.data.message : err.message)); 
-    }
+        if (isMonthly) stats.monthly = { msg: { c1: 0, c2: 0 } };
+        else stats.daily = { msg: { c1: 0, c2: 0 }, words: { c1: 0, c2: 0 }, channels: { ar: 0, eng: 0 } };
+    } catch (e) { console.log("Webhook Error"); }
 }
 
-// ===== الحسابات والـ Leveling =====
+// ===== تهيئة الحسابات =====
 const client = new Discord.Client({ intents: [32767] });
 const client2 = new Discord.Client({ intents: [32767] });
 
-const trackActivity = (clientNum, msg) => {
-    const cKey = `c${clientNum}`;
-    stats.daily.msg[cKey]++;
-    stats.monthly.msg[cKey]++;
-    stats.daily.xp[cKey] += 15;
-    stats.daily.words[cKey] += msg.content.split(/\s+/).length;
-    
-    if (msg.channelId === "1261662361660555315") stats.daily.channels.ar++;
-    else if (msg.channelId === "1246427655855804477") stats.daily.channels.eng++;
+const track = (n, m) => {
+    const k = `c${n}`;
+    stats.daily.msg[k]++;
+    stats.monthly.msg[k]++;
+    stats.daily.words[k] += m.content.split(' ').length;
+    if (m.channelId === "1261662361660555315") stats.daily.channels.ar++;
+    else if (m.channelId === "1246427655855804477") stats.daily.channels.eng++;
 };
 
-client.on("messageCreate", (msg) => { if (msg.author.id === client.user.id) trackActivity(1, msg); });
-client2.on("messageCreate", (msg) => { if (msg.author.id === client2.user.id) trackActivity(2, msg); });
+client.on("messageCreate", (m) => { if (m.author.id === client.user.id) track(1, m); });
+client2.on("messageCreate", (m) => { if (m.author.id === client2.user.id) track(2, m); });
 
 client.on("ready", () => {
-    console.log(`✅ Logged in as ${client.user.username}`);
-    // تجربة إرسال أول ما يشتغل البوت بـ 5 ثواني
-    setTimeout(() => sendStats("TEST - INITIAL START"), 5000);
+    console.log(`[+] Logged in as ${client.user.tag}`);
+    setTimeout(() => sendStats("INITIAL BOOT"), 5000);
 });
 
-client2.on("ready", () => console.log(`✅ Logged in as ${client2.user.username}`));
-
-// إعداد الـ Leveling
-const channels = [
+// تفعيل الليفل
+const targetChannels = [
     { id: "1261662361660555315", type: "ar" },
     { id: "1246427655855804477", type: "eng" }
 ];
 
-channels.forEach(ch => {
+targetChannels.forEach(ch => {
     new userAccount(client, Discord).leveling({ channel: ch.id, randomLetters: false, time: 12000, type: ch.type });
     new userAccount(client2, Discord).leveling({ channel: ch.id, randomLetters: false, time: 12000, type: ch.type });
 });
 
-// ===== الجدولة (Scheduling) =====
-
-// إرسال تجريبي كل دقيقتين (للتأكد من عمل الأرقام)
-schedule.scheduleJob('*/2 * * * *', () => sendStats("TEST - EVERY 2 MIN"));
-
-// الجدولة الحقيقية (نهاية اليوم والشهر)
-schedule.scheduleJob('0 0 * * *', () => sendStats("DAILY REPORT"));
-schedule.scheduleJob('1 0 1 * *', () => sendStats("MONTHLY SUMMARY"));
-
-// ريستارت ريندر
+// ===== الجدولة =====
+schedule.scheduleJob('0 0 * * *', () => sendStats("DAILY"));
+schedule.scheduleJob('5 0 1 * *', () => sendStats("MONTHLY"));
 schedule.scheduleJob('0 * * * *', async () => {
     try {
-        const key = process.env.RENDER_API_KEY;
-        const id = process.env.SERVICE_ID;
-        if (key && id) await axios.post(`https://api.render.com/v1/services/${id}/restart`, {}, { headers: { 'Authorization': `Bearer ${key}` } });
-    } catch (e) { console.log('Render Restart error'); }
+        const k = process.env.RENDER_API_KEY; const i = process.env.SERVICE_ID;
+        if (k && i) await axios.post(`https://api.render.com/v1/services/${i}/restart`, {}, { headers: { 'Authorization': `Bearer ${k}` } });
+    } catch (e) {}
 });
 
-// ===== تسجيل الدخول =====
+// ===== واجهة الـ Web Dashboard =====
+const app = express();
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Sphinx Dashboard</title>
+        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;500&display=swap" rel="stylesheet">
+        <style>
+            body { background: #050505; color: white; font-family: 'Roboto', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+            .bg { position: absolute; width: 100%; height: 100%; background: radial-gradient(circle at center, #1a1a3a 0%, #050505 100%); z-index: -1; }
+            .card { background: rgba(20, 20, 20, 0.8); border: 1px solid #00d4ff; padding: 40px; border-radius: 20px; box-shadow: 0 0 50px rgba(0, 212, 255, 0.2); text-align: center; backdrop-filter: blur(10px); width: 450px; }
+            h1 { font-family: 'Orbitron', sans-serif; color: #00d4ff; margin-bottom: 5px; text-shadow: 0 0 15px #00d4ff; }
+            .uptime { font-size: 1.2rem; color: #00ff88; margin-bottom: 25px; font-family: 'Orbitron'; }
+            .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+            .stat-item { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); }
+            .stat-value { display: block; font-size: 1.4rem; font-weight: bold; color: #fff; }
+            .stat-label { font-size: 0.7rem; color: #888; text-transform: uppercase; }
+            .pulse { width: 10px; height: 10px; background: #00ff88; border-radius: 50%; display: inline-block; margin-right: 10px; box-shadow: 0 0 10px #00ff88; animation: p 1.5s infinite; }
+            @keyframes p { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+        </style>
+        <script>setTimeout(() => location.reload(), 30000);</script>
+    </head>
+    <body>
+        <div class="bg"></div>
+        <div class="card">
+            <div style="margin-bottom: 15px;"><span class="pulse"></span><span style="color:#00ff88; font-size: 0.8rem;">SYSTEM LIVE</span></div>
+            <h1>SPHINX V5</h1>
+            <div class="uptime">${getUptime()}</div>
+            <div class="stats-grid">
+                <div class="stat-item"><span class="stat-value">${stats.daily.msg.c1}</span><span class="stat-label">Acc 1 Messages</span></div>
+                <div class="stat-item"><span class="stat-value">${stats.daily.msg.c2}</span><span class="stat-label">Acc 2 Messages</span></div>
+                <div class="stat-item" style="grid-column: span 2;"><span class="stat-value" style="color:#00d4ff">${calcXP(stats.daily.msg.c1 + stats.daily.msg.c2)}</span><span class="stat-label">Current Session XP ✨</span></div>
+            </div>
+            <div style="margin-top: 25px; font-size: 0.7rem; color: #444;">Connected as: ${client.user ? client.user.tag : 'Connecting...'}</div>
+        </div>
+    </body>
+    </html>
+  `);
+});
+
 client.login(process.env.token);
 client2.login(process.env.token2);
-
-const app = express();
-app.get("/", (req, res) => res.send("Monitoring System is Online"));
 app.listen(process.env.PORT || 2000);
