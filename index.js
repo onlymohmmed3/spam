@@ -166,7 +166,7 @@ app.get("/", (req, res) => {
             </div>
             <div class="btn-group">
                 <button class="btn btn-reset" onclick="act('reset')">Reset Data</button>
-                <button class="btn btn-restart" onclick="act('restart')">Restart Bot</button>
+                <button class="btn btn-restart" onclick="act('restart')">Restart</button>
             </div>
         </div>
         <script>
