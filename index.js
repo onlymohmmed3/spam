@@ -5,31 +5,101 @@ const schedule = require('node-schedule');
 const axios = require('axios');
 const express = require("express");
 
-// --- 1. إعداد الحسابات (نفس الهيكلية الناجحة) ---
-const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
-const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
+// --- 1. إعداد الحسابات ---
+const client = new Discord.Client({ checkUpdate: false });
+const client2 = new Discord.Client({ checkUpdate: false });
 
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-client.on("ready", async () => { console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`); });
-client2.on("ready", async () => { console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`); });
+// نظام تتبع البيانات المباشر للوحة التحكم
+let stats = {
+    c1: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 },
+    c2: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 }
+};
+const startTime = Date.now();
 
-// تفعيل الليفلينج (Leveling) بنفس الطريقة التي نجحت
-new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
-new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
+// وظيفة تتبع الرسائل وتحديث العدادات
+const track = (msg, key) => {
+    const bot = key === 'c1' ? client : client2;
+    if (msg.author.id === bot.user.id) {
+        stats[key].total++;
+        if (msg.channelId === CH_AR) stats[key].ar++;
+        if (msg.channelId === CH_EN) stats[key].en++;
+        stats[key].ping = bot.ws.ping;
+    }
+};
 
-new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
-new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
+client.on("messageCreate", (msg) => track(msg, 'c1'));
+client2.on("messageCreate", (msg) => track(msg, 'c2'));
 
-// تسجيل الدخول
+client.on("ready", async () => { 
+    console.log(`[SYSTEM] Account 1: ${client.user.username} ONLINE`); 
+    stats.c1.name = client.user.username;
+    // تفعيل الليفلينج فور الاتصال
+    const acc1 = new userAccount(client, Discord);
+    acc1.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
+    acc1.leveling({ channel: CH_EN, randomLetters: false, time: 13000, type: "eng" });
+});
+
+client2.on("ready", async () => { 
+    console.log(`[SYSTEM] Account 2: ${client2.user.username} ONLINE`); 
+    stats.c2.name = client2.user.username;
+    // تفعيل الليفلينج فور الاتصال
+    const acc2 = new userAccount(client2, Discord);
+    acc2.leveling({ channel: CH_AR, randomLetters: false, time: 13500, type: "ar" });
+    acc2.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
+});
+
 client.login(process.env.token);
 client2.login(process.env.token2);
 
-// --- واجهة الويب الاحترافية ---
+// --- 2. إعداد سيرفر الويب والـ API ---
 const app = express();
 app.use(express.json());
 
+// مسار جلب البيانات المباشر (تستخدمه لوحة التحكم للتحديث كل ثانية)
+app.get("/api/data", (req, res) => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    const mins = s / 60 || 1;
+    res.json({
+        uptime: { d: Math.floor(s/86400), h: Math.floor((s%86400)/3600), m: Math.floor((s%3600)/60), s: s%60 },
+        stats: stats,
+        speed: {
+            c1: (stats.c1.total / mins).toFixed(1),
+            c2: (stats.c2.total / mins).toFixed(1)
+        },
+        status: { c1: client.isReady(), c2: client2.isReady() }
+    });
+});
+
+// مسار تصفير العدادات (زر Reset)
+app.post("/api/reset", (req, res) => {
+    stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0 };
+    stats.c2 = { ...stats.c2, total: 0, ar: 0, en: 0 };
+    console.log("Stats reset via dashboard");
+    res.json({ success: true });
+});
+
+// مسار إعادة التشغيل (زر Restart)
+app.post("/api/restart", async (req, res) => {
+    const key = process.env.RENDER_API_KEY;
+    const id = process.env.SERVICE_ID;
+    if (key && id) {
+        try {
+            await axios.post(`https://api.render.com/v1/services/${id}/restart`, {}, { 
+                headers: { 'Authorization': `Bearer ${key}` } 
+            });
+            res.json({ success: true, message: "System restarting..." });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    } else {
+        res.status(400).json({ success: false, error: "API Key or Service ID missing" });
+    }
+});
+
+// واجهة الويب (HTML)
 app.get("/", (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -68,7 +138,7 @@ app.get("/", (req, res) => {
             .metrics b { color: #00ff88; }
             .btn-group { display: flex; gap: 15px; justify-content: center; }
             .btn { padding: 18px 45px; border-radius: 20px; font-weight: 800; cursor: pointer; border: none; text-transform: uppercase; font-size: 0.85rem; transition: 0.3s; }
-            .btn-reset { background: rgba(255,255,255,0.05); color: #ff4757; border: 1px solid rgba(255,71,87,0.3); }
+            .btn-reset { background: rgba(255,255,255,0.05); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.3); }
             .btn-reset:hover { background: #ff4757; color: #fff; }
             .btn-restart { background: #fff; color: #000; }
             .btn-restart:hover { background: #00d4ff; transform: scale(1.05); }
@@ -95,12 +165,25 @@ app.get("/", (req, res) => {
                 </div>
             </div>
             <div class="btn-group">
-                <button class="btn btn-reset" onclick="act('reset')">Reset Stats</button>
-                <button class="btn btn-restart" onclick="location.reload()">Refresh UI</button>
+                <button class="btn btn-reset" onclick="act('reset')">Reset Data</button>
+                <button class="btn btn-restart" onclick="act('restart')">Restart Bot</button>
             </div>
         </div>
         <script>
-            async function act(t){ if(confirm('Reset all counters?')) await fetch('/api/'+t,{method:'POST'}); location.reload(); }
+            async function act(type) {
+                if(!confirm(\`Are you sure you want to \${type}?\`)) return;
+                try {
+                    const response = await fetch('/api/' + type, { method: 'POST' });
+                    const result = await response.json();
+                    if(result.success) {
+                        alert(type === 'restart' ? 'Restarting via Render API...' : 'Stats cleared!');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + result.error);
+                    }
+                } catch(e) { alert('Request failed'); }
+            }
+
             setInterval(async () => {
                 try {
                     const r = await fetch('/api/data'); const d = await r.json();
@@ -123,7 +206,7 @@ app.get("/", (req, res) => {
     `);
 });
 
-// --- 3. نظام الريستارت التلقائي ---
+// --- 3. نظام الرستات التلقائي كل ساعة ---
 schedule.scheduleJob('0 * * * *', async () => {
     const key = process.env.RENDER_API_KEY;
     const id = process.env.SERVICE_ID;
@@ -133,7 +216,7 @@ schedule.scheduleJob('0 * * * *', async () => {
                 headers: { 'Authorization': `Bearer ${key}` } 
             }); 
             console.log("Auto-Restart executed successfully.");
-        } catch (e) { console.error("Restart Error"); }
+        } catch (e) { console.error("Auto-Restart Error"); }
     }
 });
 
