@@ -1,81 +1,50 @@
 require('dotenv').config();
 const Discord = require("discord.js-selfbot-v13");
 const { userAccount } = require("sphinx-run");
+const schedule = require('node-schedule');
 const axios = require('axios');
 const express = require("express");
-const schedule = require('node-schedule');
 
-// --- إعدادات القنوات ---
+// --- 1. إعداد الحسابات (نفس الهيكلية الناجحة) ---
+const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
+const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
+
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-// --- نظام البيانات ---
-let stats = {
-    c1: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 },
-    c2: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 }
-};
-const startTime = Date.now();
+client.on("ready", async () => { console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`); });
+client2.on("ready", async () => { console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`); });
 
-// --- إعداد العملاء مع الـ Intents الصحيحة لضمان الإرسال ---
-const client = new Discord.Client({ checkUpdate: false });
-const client2 = new Discord.Client({ checkUpdate: false });
+// تفعيل الليفلينج (Leveling) بنفس الطريقة التي نجحت
+new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
+new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
 
-// وظيفة تتبع الرسائل وتحديث العدادات
-const track = (msg, key) => {
-    const bot = key === 'c1' ? client : client2;
-    if (msg.author.id === bot.user.id) {
-        stats[key].total++;
-        if (msg.channelId === CH_AR) stats[key].ar++;
-        if (msg.channelId === CH_EN) stats[key].en++;
-        stats[key].ping = bot.ws.ping;
-    }
-};
-
-client.on("messageCreate", (msg) => track(msg, 'c1'));
-client2.on("messageCreate", (msg) => track(msg, 'c2'));
-
-// --- تشغيل الحساب الأول عند الجاهزية ---
-client.on("ready", async () => {
-    console.log(`✅ ${client.user.username} (Acc 1) is sending now!`);
-    stats.c1.name = client.user.username;
-    
-    const acc1 = new userAccount(client, Discord);
-    acc1.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
-    acc1.leveling({ channel: CH_EN, randomLetters: false, time: 13000, type: "eng" });
-});
-
-// --- تشغيل الحساب الثاني عند الجاهزية ---
-client2.on("ready", async () => {
-    console.log(`✅ ${client2.user.username} (Acc 2) is sending now!`);
-    stats.c2.name = client2.user.username;
-    
-    // تأخير بسيط للحساب الثاني لمنع الباند
-    setTimeout(() => {
-        const acc2 = new userAccount(client2, Discord);
-        acc2.leveling({ channel: CH_AR, randomLetters: false, time: 13500, type: "ar" });
-        acc2.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
-    }, 5000);
-});
+new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
+new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
 
 // تسجيل الدخول
-client.login(process.env.token).catch(e => console.error("Token1 Error"));
-client2.login(process.env.token2).catch(e => console.error("Token2 Error"));
+client.login(process.env.token);
+client2.login(process.env.token2);
 
-// --- نظام الرستات التلقائي (كل ساعة) ---
-schedule.scheduleJob('0 * * * *', async function() {
-    console.log('🔄 Auto-Restarting Service...');
-    try {
-        const key = process.env.RENDER_API_KEY;
-        const id = process.env.SERVICE_ID;
-        if(key && id) {
-            await axios.post(`https://api.render.com/v1/services/${id}/restart`, {}, {
-                headers: { 'Authorization': `Bearer ${key}` }
-            });
-        }
-    } catch (e) { console.log('Restart Error: ' + e.message); }
+// --- 2. واجهة الويب الاحترافية (التصميم النهائي) ---
+const startTime = Date.now();
+const app = express();
+
+app.get("/api/data", (req, res) => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    res.json({
+        uptime: {
+            d: Math.floor(s / 86400),
+            h: Math.floor((s % 86400) / 3600),
+            m: Math.floor((s % 3600) / 60),
+            s: s % 60
+        },
+        c1: { name: client.user ? client.user.username : "Connecting...", status: client.isReady() },
+        c2: { name: client2.user ? client2.user.username : "Connecting...", status: client2.isReady() }
+    });
 });
 
-// --- واجهة الويب المتطورة ---
+// --- واجهة الويب الاحترافية ---
 const app = express();
 app.use(express.json());
 
@@ -105,7 +74,7 @@ app.get("/", (req, res) => {
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>SPAM PRO | ELITE PANEL</title>
+        <title>SPAM PRO | ELITE DASHBOARD</title>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
             * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -131,7 +100,7 @@ app.get("/", (req, res) => {
             .card:hover { transform: translateY(-10px); border-color: #00d4ff; background: rgba(255,255,255,0.06); }
             .dot { position: absolute; top: 25px; right: 25px; width: 10px; height: 10px; border-radius: 50%; background: #ff4757; }
             .online { background: #00ff88; box-shadow: 0 0 15px #00ff88; }
-            .acc-name { color: #00d4ff; font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; }
+            .acc-name { color: #00d4ff; font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; text-transform: uppercase; }
             .count { font-size: 5rem; font-weight: 900; line-height: 1; }
             .metrics { display: flex; justify-content: center; gap: 15px; margin-top: 20px; font-size: 0.8rem; font-weight: bold; }
             .metrics b { color: #00ff88; }
@@ -145,7 +114,7 @@ app.get("/", (req, res) => {
     </head>
     <body>
         <div class="glass">
-            <div style="font-size: 0.75rem; letter-spacing: 5px; opacity: 0.4; margin-bottom: 10px;">SYSTEM RUNTIME</div>
+            <div style="font-size: 0.75rem; letter-spacing: 5px; opacity: 0.4; margin-bottom: 10px;">SYSTEM LIVE MONITOR</div>
             <div class="uptime" id="uptime">0d 0h 0m 0s</div>
             <div class="grid">
                 <div class="card">
@@ -164,12 +133,12 @@ app.get("/", (req, res) => {
                 </div>
             </div>
             <div class="btn-group">
-                <button class="btn btn-reset" onclick="act('reset')">Reset Counters</button>
+                <button class="btn btn-reset" onclick="act('reset')">Reset Stats</button>
                 <button class="btn btn-restart" onclick="location.reload()">Refresh UI</button>
             </div>
         </div>
         <script>
-            async function act(t){ if(confirm('Are you sure?')) await fetch('/api/'+t,{method:'POST'}); location.reload(); }
+            async function act(t){ if(confirm('Reset all counters?')) await fetch('/api/'+t,{method:'POST'}); location.reload(); }
             setInterval(async () => {
                 try {
                     const r = await fetch('/api/data'); const d = await r.json();
@@ -190,6 +159,20 @@ app.get("/", (req, res) => {
     </body>
     </html>
     `);
+});
+
+// --- 3. نظام الريستارت التلقائي ---
+schedule.scheduleJob('0 * * * *', async () => {
+    const key = process.env.RENDER_API_KEY;
+    const id = process.env.SERVICE_ID;
+    if (key && id) {
+        try { 
+            await axios.post(`https://api.render.com/v1/services/${id}/restart`, {}, { 
+                headers: { 'Authorization': `Bearer ${key}` } 
+            }); 
+            console.log("Auto-Restart executed successfully.");
+        } catch (e) { console.error("Restart Error"); }
+    }
 });
 
 app.listen(process.env.PORT || 2000);
