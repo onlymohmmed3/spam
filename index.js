@@ -5,52 +5,24 @@ const schedule = require('node-schedule');
 const axios = require('axios');
 const express = require("express");
 
-// --- 1. إعداد الحسابات ---
-const client = new Discord.Client({ checkUpdate: false });
-const client2 = new Discord.Client({ checkUpdate: false });
+// --- 1. إعداد الحسابات (نفس الهيكلية الناجحة) ---
+const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
+const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
 
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-// نظام تتبع البيانات المباشر للوحة التحكم
-let stats = {
-    c1: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 },
-    c2: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 }
-};
-const startTime = Date.now();
+client.on("ready", async () => { console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`); });
+client2.on("ready", async () => { console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`); });
 
-// وظيفة تتبع الرسائل وتحديث العدادات
-const track = (msg, key) => {
-    const bot = key === 'c1' ? client : client2;
-    if (msg.author.id === bot.user.id) {
-        stats[key].total++;
-        if (msg.channelId === CH_AR) stats[key].ar++;
-        if (msg.channelId === CH_EN) stats[key].en++;
-        stats[key].ping = bot.ws.ping;
-    }
-};
+// تفعيل الليفلينج (Leveling) بنفس الطريقة التي نجحت
+new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
+new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
 
-client.on("messageCreate", (msg) => track(msg, 'c1'));
-client2.on("messageCreate", (msg) => track(msg, 'c2'));
+new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
+new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
 
-client.on("ready", async () => { 
-    console.log(`[SYSTEM] Account 1: ${client.user.username} ONLINE`); 
-    stats.c1.name = client.user.username;
-    // تفعيل الليفلينج فور الاتصال
-    const acc1 = new userAccount(client, Discord);
-    acc1.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
-    acc1.leveling({ channel: CH_EN, randomLetters: false, time: 13000, type: "eng" });
-});
-
-client2.on("ready", async () => { 
-    console.log(`[SYSTEM] Account 2: ${client2.user.username} ONLINE`); 
-    stats.c2.name = client2.user.username;
-    // تفعيل الليفلينج فور الاتصال
-    const acc2 = new userAccount(client2, Discord);
-    acc2.leveling({ channel: CH_AR, randomLetters: false, time: 13500, type: "ar" });
-    acc2.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
-});
-
+// تسجيل الدخول
 client.login(process.env.token);
 client2.login(process.env.token2);
 
@@ -206,7 +178,7 @@ app.get("/", (req, res) => {
     `);
 });
 
-// --- 3. نظام الرستات التلقائي كل ساعة ---
+// --- 3. نظام الريستارت التلقائي ---
 schedule.scheduleJob('0 * * * *', async () => {
     const key = process.env.RENDER_API_KEY;
     const id = process.env.SERVICE_ID;
@@ -216,7 +188,7 @@ schedule.scheduleJob('0 * * * *', async () => {
                 headers: { 'Authorization': `Bearer ${key}` } 
             }); 
             console.log("Auto-Restart executed successfully.");
-        } catch (e) { console.error("Auto-Restart Error"); }
+        } catch (e) { console.error("Restart Error"); }
     }
 });
 
