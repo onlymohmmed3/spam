@@ -10,27 +10,28 @@ const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
 // --- الحساب الأول ---
-const client1 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
-client1.on("ready", () => {
+const client1 = new Discord.Client({ checkUpdate: false });
+client1.on("ready", async () => {
     console.log(`✅ Account 1 Ready: ${client1.user.username}`);
-    // تشغيل الحساب الأول
-    const bot1 = new userAccount(client1, Discord);
-    bot1.leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
-    bot1.leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
+    // تشغيل الإرسال للحساب الأول فوراً
+    const runner1 = new userAccount(client1, Discord);
+    runner1.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
+    runner1.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
 });
 
-// --- الحساب الثاني (مع تأخير تشغيل 10 ثواني لضمان الاستقرار) ---
-const client2 = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS] });
-client2.on("ready", () => {
+// --- الحساب الثاني ---
+const client2 = new Discord.Client({ checkUpdate: false });
+client2.on("ready", async () => {
     console.log(`✅ Account 2 Ready: ${client2.user.username}`);
+    // انتظار 15 ثانية قبل تشغيل الحساب الثاني لضمان عدم حدوث تداخل
     setTimeout(() => {
-        const bot2 = new userAccount(client2, Discord);
-        bot2.leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
-        bot2.leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
-    }, 10000); // تأخير بسيط ليبدأ بعد الحساب الأول
+        const runner2 = new userAccount(client2, Discord);
+        runner2.leveling({ channel: CH_AR, randomLetters: false, time: 14000, type: "ar" });
+        runner2.leveling({ channel: CH_EN, randomLetters: false, time: 14500, type: "eng" });
+    }, 15000);
 });
 
-// تسجيل الدخول
+// تسجيل الدخول (نفس كودك القديم)
 client1.login(process.env.token);
 client2.login(process.env.token2);
 
@@ -52,32 +53,36 @@ app.get("/", (req, res) => {
         <meta charset="UTF-8">
         <style>
             body { margin: 0; background: #020205; color: white; font-family: sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 50%, #0a0a25 0%, #020205 100%); }
-            .container { width: 90%; max-width: 600px; background: rgba(255, 255, 255, 0.02); padding: 40px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px); text-align: center; }
-            #uptime { font-size: 3.5rem; font-weight: bold; margin: 20px 0; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
-            .node { background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); }
-            .on { color: #00ff88; font-weight: bold; }
+            .container { width: 90%; max-width: 600px; background: rgba(255, 255, 255, 0.02); padding: 45px; border-radius: 35px; border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(25px); text-align: center; box-shadow: 0 40px 100px rgba(0,0,0,0.8); }
+            h1 { font-size: 0.8rem; color: #555; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 5px; }
+            #uptime { font-size: 3.2rem; font-weight: bold; margin-bottom: 35px; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.1); }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .node { background: rgba(255, 255, 255, 0.03); padding: 25px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05); }
+            .label { font-size: 0.7rem; color: #888; margin-bottom: 10px; text-transform: uppercase; }
+            .on { color: #00ff88; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
             .off { color: #ff4444; }
         </style>
     </head>
     <body>
         <div class="container">
-            <div style="color:#00d4ff; font-size:0.8rem; letter-spacing:3px;">SYSTEM CORE ACTIVE</div>
+            <h1>Running Time</h1>
             <div id="uptime">0d 0h 0m 0s</div>
             <div class="grid">
-                <div class="node">Account 1<br><span id="s1" class="off">OFFLINE</span></div>
-                <div class="node">Account 2<br><span id="s2" class="off">OFFLINE</span></div>
+                <div class="node"><div class="label">Account 01</div><span id="s1" class="off">OFFLINE</span></div>
+                <div class="node"><div class="label">Account 02</div><span id="s2" class="off">OFFLINE</span></div>
             </div>
         </div>
         <script>
             setInterval(async () => {
-                const r = await fetch('/api/data');
-                const d = await r.json();
-                document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
-                document.getElementById('s1').innerText = d.c1 ? "ONLINE" : "OFFLINE";
-                document.getElementById('s1').className = d.c1 ? "on" : "off";
-                document.getElementById('s2').innerText = d.c2 ? "ONLINE" : "OFFLINE";
-                document.getElementById('s2').className = d.c2 ? "on" : "off";
+                try {
+                    const r = await fetch('/api/data');
+                    const d = await r.json();
+                    document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
+                    document.getElementById('s1').innerText = d.c1 ? "ONLINE" : "OFFLINE";
+                    document.getElementById('s1').className = d.c1 ? "on" : "off";
+                    document.getElementById('s2').innerText = d.c2 ? "ONLINE" : "OFFLINE";
+                    document.getElementById('s2').className = d.c2 ? "on" : "off";
+                } catch(e){}
             }, 1000);
         </script>
     </body>
@@ -85,7 +90,7 @@ app.get("/", (req, res) => {
     `);
 });
 
-// نظام الريستارت
+// نظام الريستارت (من كودك)
 schedule.scheduleJob('0 * * * *', async () => {
     const key = process.env.RENDER_API_KEY;
     const id = process.env.SERVICE_ID;
