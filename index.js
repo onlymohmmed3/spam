@@ -9,67 +9,68 @@ const startTime = Date.now();
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-// --- الحساب الأول ---
 const client1 = new Discord.Client({ checkUpdate: false });
-client1.on("ready", async () => {
-    console.log(`✅ Account 1 Ready: ${client1.user.username}`);
-    // تشغيل الإرسال للحساب الأول فوراً
-    const runner1 = new userAccount(client1, Discord);
-    runner1.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
-    runner1.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
-});
-
-// --- الحساب الثاني ---
 const client2 = new Discord.Client({ checkUpdate: false });
-client2.on("ready", async () => {
-    console.log(`✅ Account 2 Ready: ${client2.user.username}`);
-    // انتظار 15 ثانية قبل تشغيل الحساب الثاني لضمان عدم حدوث تداخل
-    setTimeout(() => {
-        const runner2 = new userAccount(client2, Discord);
-        runner2.leveling({ channel: CH_AR, randomLetters: false, time: 14000, type: "ar" });
-        runner2.leveling({ channel: CH_EN, randomLetters: false, time: 14500, type: "eng" });
-    }, 15000);
+
+// --- الحساب الأول ---
+client1.on("ready", async () => {
+    console.log(`[1] Logged in as: ${client1.user.tag}`);
+    const bot1 = new userAccount(client1, Discord);
+    bot1.leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
+    bot1.leveling({ channel: CH_EN, randomLetters: false, time: 13000, type: "eng" });
 });
 
-// تسجيل الدخول (نفس كودك القديم)
+// --- الحساب الثاني (مع تأخير 10 ثواني) ---
+client2.on("ready", async () => {
+    console.log(`[2] Logged in as: ${client2.user.tag}`);
+    setTimeout(() => {
+        const bot2 = new userAccount(client2, Discord);
+        bot2.leveling({ channel: CH_AR, randomLetters: false, time: 13500, type: "ar" });
+        bot2.leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
+    }, 10000);
+});
+
+// تسجيل الدخول
 client1.login(process.env.token);
 client2.login(process.env.token2);
 
-// --- واجهة الويب الاحترافية ---
+// --- واجهة الويب ---
 const app = express();
 app.get("/api/data", (req, res) => {
     const s = Math.floor((Date.now() - startTime) / 1000);
     res.json({
         uptime: { d: Math.floor(s / 86400), h: Math.floor((s % 86400) / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 },
-        c1: client1.isReady(), c2: client2.isReady()
+        u1: client1.user ? client1.user.username : "Connecting...",
+        u2: client2.user ? client2.user.username : "Connecting...",
+        s1: client1.isReady(), s2: client2.isReady()
     });
 });
 
 app.get("/", (req, res) => {
     res.send(`
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
+        <title>Debug Mode</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
         <style>
-            body { margin: 0; background: #020205; color: white; font-family: sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 50%, #0a0a25 0%, #020205 100%); }
-            .container { width: 90%; max-width: 600px; background: rgba(255, 255, 255, 0.02); padding: 45px; border-radius: 35px; border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(25px); text-align: center; box-shadow: 0 40px 100px rgba(0,0,0,0.8); }
-            h1 { font-size: 0.8rem; color: #555; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 5px; }
-            #uptime { font-size: 3.2rem; font-weight: bold; margin-bottom: 35px; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.1); }
+            body { margin: 0; background: #020205; color: white; font-family: 'Inter', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 50%, #0a0a25 0%, #020205 100%); }
+            .container { width: 90%; max-width: 600px; background: rgba(255, 255, 255, 0.02); padding: 40px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px); text-align: center; }
+            #uptime { font-size: 3rem; font-weight: bold; margin: 20px 0; }
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-            .node { background: rgba(255, 255, 255, 0.03); padding: 25px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05); }
-            .label { font-size: 0.7rem; color: #888; margin-bottom: 10px; text-transform: uppercase; }
-            .on { color: #00ff88; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
-            .off { color: #ff4444; }
+            .card { background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05); }
+            .name { font-size: 0.8rem; color: #888; margin-bottom: 5px; }
+            .status { font-weight: bold; font-size: 1.2rem; }
+            .on { color: #00ff88; } .off { color: #ff4444; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Running Time</h1>
+            <div style="color:#00d4ff; font-size:0.8rem; letter-spacing:2px;">TESTING SESSION</div>
             <div id="uptime">0d 0h 0m 0s</div>
             <div class="grid">
-                <div class="node"><div class="label">Account 01</div><span id="s1" class="off">OFFLINE</span></div>
-                <div class="node"><div class="label">Account 02</div><span id="s2" class="off">OFFLINE</span></div>
+                <div class="card"><div class="name" id="n1">Loading...</div><div id="s1" class="off">OFFLINE</div></div>
+                <div class="card"><div class="name" id="n2">Loading...</div><div id="s2" class="off">OFFLINE</div></div>
             </div>
         </div>
         <script>
@@ -78,10 +79,12 @@ app.get("/", (req, res) => {
                     const r = await fetch('/api/data');
                     const d = await r.json();
                     document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
-                    document.getElementById('s1').innerText = d.c1 ? "ONLINE" : "OFFLINE";
-                    document.getElementById('s1').className = d.c1 ? "on" : "off";
-                    document.getElementById('s2').innerText = d.c2 ? "ONLINE" : "OFFLINE";
-                    document.getElementById('s2').className = d.c2 ? "on" : "off";
+                    document.getElementById('n1').innerText = d.u1;
+                    document.getElementById('n2').innerText = d.u2;
+                    document.getElementById('s1').innerText = d.s1 ? "ACTIVE" : "OFFLINE";
+                    document.getElementById('s1').className = d.s1 ? "status on" : "status off";
+                    document.getElementById('s2').innerText = d.s2 ? "ACTIVE" : "OFFLINE";
+                    document.getElementById('s2').className = d.s2 ? "status on" : "status off";
                 } catch(e){}
             }, 1000);
         </script>
@@ -90,7 +93,7 @@ app.get("/", (req, res) => {
     `);
 });
 
-// نظام الريستارت (من كودك)
+// ريستارت تلقائي
 schedule.scheduleJob('0 * * * *', async () => {
     const key = process.env.RENDER_API_KEY;
     const id = process.env.SERVICE_ID;
