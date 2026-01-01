@@ -48,26 +48,6 @@ app.get("/api/data", (req, res) => {
 const app = express();
 app.use(express.json());
 
-app.get("/api/data", (req, res) => {
-    const s = Math.floor((Date.now() - startTime) / 1000);
-    const mins = s / 60 || 1;
-    res.json({
-        uptime: { d: Math.floor(s/86400), h: Math.floor((s%86400)/3600), m: Math.floor((s%3600)/60), s: s%60 },
-        stats: stats,
-        speed: {
-            c1: (stats.c1.total / mins).toFixed(1),
-            c2: (stats.c2.total / mins).toFixed(1)
-        },
-        status: { c1: client.isReady(), c2: client2.isReady() }
-    });
-});
-
-app.post("/api/reset", (req, res) => {
-    stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0 };
-    stats.c2 = { ...stats.c2, total: 0, ar: 0, en: 0 };
-    res.json({ success: true });
-});
-
 app.get("/", (req, res) => {
     res.send(`
     <!DOCTYPE html>
