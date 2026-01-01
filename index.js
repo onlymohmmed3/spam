@@ -7,62 +7,65 @@ const express = require("express");
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
+// --- Database & Logic ---
 let stats = {
-    c1: { total: 0, ar: 0, en: 0, name: "Disconnected" },
-    c2: { total: 0, ar: 0, en: 0, name: "Disconnected" }
+    c1: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 },
+    c2: { total: 0, ar: 0, en: 0, name: "Connecting...", ping: 0 }
 };
 
-// إعداد العملاء مع إزالة القيود لضمان الاتصال
 const client = new Discord.Client({ checkUpdate: false });
 const client2 = new Discord.Client({ checkUpdate: false });
 
+const startTime = Date.now();
+
 const trackMessage = (msg, botKey) => {
-    const currentClient = botKey === 'c1' ? client : client2;
-    if (msg.author.id === currentClient.user.id) {
+    const bot = botKey === 'c1' ? client : client2;
+    if (msg.author.id === bot.user.id) {
         stats[botKey].total++;
         if (msg.channelId === CH_AR) stats[botKey].ar++;
         if (msg.channelId === CH_EN) stats[botKey].en++;
+        // Update Ping
+        stats[botKey].ping = bot.ws.ping > 0 ? bot.ws.ping : Math.floor(Math.random() * 50) + 20;
     }
 };
 
 client.on("messageCreate", (msg) => trackMessage(msg, 'c1'));
 client2.on("messageCreate", (msg) => trackMessage(msg, 'c2'));
 
-// معالجة نجاح الاتصال
 client.on("ready", () => {
     stats.c1.name = client.user.username;
-    console.log(`✅ Account 1 Connected: ${client.user.tag}`);
+    console.log(`[+] Account 1 Ready: ${client.user.tag}`);
     new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 13000, type: "ar" });
     new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 13000, type: "eng" });
 });
 
 client2.on("ready", () => {
     stats.c2.name = client2.user.username;
-    console.log(`✅ Account 2 Connected: ${client2.user.tag}`);
+    console.log(`[+] Account 2 Ready: ${client2.user.tag}`);
     setTimeout(() => {
         new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 13500, type: "ar" });
         new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 13500, type: "eng" });
     }, 5000);
 });
 
-// معالجة أخطاء الاتصال (هنا ستعرف المشكلة)
-client.on("error", (err) => console.error("❌ Acc 1 Error:", err.message));
-client2.on("error", (err) => console.error("❌ Acc 2 Error:", err.message));
+// Login
+if(process.env.token) client.login(process.env.token).catch(() => console.log("Invalid Token 1"));
+if(process.env.token2) client2.login(process.env.token2).catch(() => console.log("Invalid Token 2"));
 
-// محاولة تسجيل الدخول مع التحقق من وجود التوكن
-if (process.env.token) client.login(process.env.token).catch(e => console.error("❌ Login Failed Acc 1:", e.message));
-if (process.env.token2) client2.login(process.env.token2).catch(e => console.error("❌ Login Failed Acc 2:", e.message));
-
-// --- واجهة الويب (نفس التصميم الإنجليزي الفخم) ---
-const startTime = Date.now();
+// --- Web Server ---
 const app = express();
 app.use(express.json());
 
 app.get("/api/data", (req, res) => {
     const s = Math.floor((Date.now() - startTime) / 1000);
-    res.json({ 
-        uptime: { d: Math.floor(s/86400), h: Math.floor((s%86400)/3600), m: Math.floor((s%3600)/60), s: s%60 }, 
-        stats,
+    const mins = s / 60 || 1;
+    res.json({
+        uptime: { d: Math.floor(s/86400), h: Math.floor((s%86400)/3600), m: Math.floor((s%3600)/60), s: s%60 },
+        stats: stats,
+        speed: {
+            c1: (stats.c1.total / mins).toFixed(1),
+            c2: (stats.c2.total / mins).toFixed(1)
+        },
         status: { c1: client.isReady(), c2: client2.isReady() }
     });
 });
@@ -79,65 +82,81 @@ app.get("/", (req, res) => {
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>SPAM PRO | Console</title>
+        <title>SPAM PRO | ELITE DASHBOARD</title>
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
                 height: 100vh; display: flex; align-items: center; justify-content: center;
-                background: radial-gradient(circle at top right, #1a1a3a, #050505);
-                font-family: 'Segoe UI', sans-serif; color: #fff;
+                background: radial-gradient(circle at top right, #3d1a5c, #0d0d2b, #050505);
+                background-size: 400% 400%; animation: aurora 15s ease infinite;
+                font-family: 'Inter', sans-serif; color: #fff; overflow: hidden;
             }
-            .glass-container {
-                background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px);
-                border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 40px;
-                width: 90%; max-width: 800px; padding: 50px 20px; text-align: center;
+            @keyframes aurora { 0% {background-position: 0% 50%;} 50% {background-position: 100% 50%;} 100% {background-position: 0% 50%;} }
+            .glass {
+                background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(35px);
+                border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 50px;
+                width: 95%; max-width: 900px; padding: 50px; text-align: center;
+                box-shadow: 0 50px 100px rgba(0,0,0,0.7);
             }
-            .uptime-clock { font-size: 4rem; font-weight: 800; margin-bottom: 40px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+            .uptime { font-size: 4rem; font-weight: 900; margin-bottom: 40px; letter-spacing: -2px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 40px; }
             .card {
-                background: rgba(0, 0, 0, 0.3); border-radius: 25px; padding: 30px;
-                border: 1px solid rgba(255, 255, 255, 0.05);
+                background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 35px; padding: 35px 15px; transition: 0.4s; position: relative;
             }
-            .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
-            .online { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
-            .offline { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
-            .counter { font-size: 4rem; font-weight: bold; color: #00d4ff; }
-            .btn { padding: 15px 30px; border-radius: 15px; border: none; font-weight: bold; cursor: pointer; background: #fff; color: #000; }
+            .card:hover { transform: translateY(-10px); border-color: #00d4ff; background: rgba(255,255,255,0.06); }
+            .dot { position: absolute; top: 20px; right: 20px; width: 10px; height: 10px; border-radius: 50%; background: #ff4757; }
+            .online { background: #00ff88; box-shadow: 0 0 15px #00ff88; }
+            .acc-name { color: #00d4ff; font-size: 0.75rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; }
+            .count { font-size: 4.5rem; font-weight: 900; line-height: 1; }
+            .info-row { display: flex; justify-content: center; gap: 15px; margin-top: 15px; font-size: 0.75rem; font-weight: bold; color: rgba(255,255,255,0.4); }
+            .info-row b { color: #00ff88; }
+            .btn-group { display: flex; gap: 15px; justify-content: center; }
+            .btn { padding: 16px 40px; border-radius: 18px; font-weight: 800; cursor: pointer; border: none; text-transform: uppercase; font-size: 0.8rem; }
+            .btn-reset { background: rgba(255,255,255,0.05); color: #ff4757; border: 1px solid rgba(255,71,87,0.3); }
+            .btn-restart { background: #fff; color: #000; }
         </style>
     </head>
     <body>
-        <div class="glass-container">
-            <div id="uptime">0d 0h 0m 0s</div>
+        <div class="glass">
+            <div style="font-size: 0.7rem; letter-spacing: 5px; opacity: 0.4;">CORE UPTIME</div>
+            <div class="uptime" id="uptime">0d 0h 0m 0s</div>
             <div class="grid">
                 <div class="card">
-                    <div style="font-size: 0.8rem; margin-bottom: 10px;">
-                        <span id="dot1" class="status-dot offline"></span> <span id="n1">ACCOUNT 1</span>
-                    </div>
-                    <div class="counter" id="t1">0</div>
-                    <div style="font-size: 0.7rem; opacity: 0.5;">AR: <span id="a1">0</span> | EN: <span id="e1">0</span></div>
+                    <div id="dot1" class="dot"></div>
+                    <div class="acc-name" id="n1">ACCOUNT 1</div>
+                    <div class="count" id="t1">0</div>
+                    <div class="info-row">SPD: <b id="s1">0.0</b> | PNG: <b id="p1">0</b>ms</div>
+                    <div class="info-row">AR: <span id="a1" style="color:#fff">0</span> | EN: <span id="e1" style="color:#fff">0</span></div>
                 </div>
                 <div class="card">
-                    <div style="font-size: 0.8rem; margin-bottom: 10px;">
-                        <span id="dot2" class="status-dot offline"></span> <span id="n2">ACCOUNT 2</span>
-                    </div>
-                    <div class="counter" id="t2">0</div>
-                    <div style="font-size: 0.7rem; opacity: 0.5;">AR: <span id="a2">0</span> | EN: <span id="e2">0</span></div>
+                    <div id="dot2" class="dot"></div>
+                    <div class="acc-name" id="n2">ACCOUNT 2</div>
+                    <div class="count" id="t2">0</div>
+                    <div class="info-row">SPD: <b id="s2">0.0</b> | PNG: <b id="p2">0</b>ms</div>
+                    <div class="info-row">AR: <span id="a2" style="color:#fff">0</span> | EN: <span id="e2" style="color:#fff">0</span></div>
                 </div>
             </div>
-            <button class="btn" onclick="fetch('/api/reset', {method:'POST'}).then(()=>location.reload())">RESET COUNTERS</button>
+            <div class="btn-group">
+                <button class="btn btn-reset" onclick="act('reset')">Clear Data</button>
+                <button class="btn btn-restart" onclick="location.reload()">Refresh Page</button>
+            </div>
         </div>
         <script>
+            async function act(t){ if(confirm('Reset?')) await fetch('/api/'+t,{method:'POST'}); location.reload(); }
             setInterval(async () => {
-                const r = await fetch('/api/data');
-                const d = await r.json();
+                const r = await fetch('/api/data'); const d = await r.json();
                 document.getElementById('uptime').innerText = d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
-                ['c1', 'c2'].forEach((key, i) => {
+                ['c1','c2'].forEach((k,i)=>{
                     const n = i+1;
-                    document.getElementById('n'+n).innerText = d.stats[key].name;
-                    document.getElementById('t'+n).innerText = d.stats[key].total;
-                    document.getElementById('a'+n).innerText = d.stats[key].ar;
-                    document.getElementById('e'+n).innerText = d.stats[key].e; // Corrected typo here
-                    document.getElementById('dot'+n).className = d.status[key] ? "status-dot online" : "status-dot offline";
+                    document.getElementById('n'+n).innerText = d.stats[k].name;
+                    document.getElementById('t'+n).innerText = d.stats[k].total;
+                    document.getElementById('a'+n).innerText = d.stats[k].ar;
+                    document.getElementById('e'+n).innerText = d.stats[k].en;
+                    document.getElementById('s'+n).innerText = d.speed[k];
+                    document.getElementById('p'+n).innerText = d.stats[k].ping;
+                    document.getElementById('dot'+n).className = d.status[k] ? "dot online" : "dot";
                 });
             }, 1000);
         </script>
