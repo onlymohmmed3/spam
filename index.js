@@ -26,24 +26,6 @@ new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: fals
 client.login(process.env.token);
 client2.login(process.env.token2);
 
-// --- 2. واجهة الويب الاحترافية (التصميم النهائي) ---
-const startTime = Date.now();
-const app = express();
-
-app.get("/api/data", (req, res) => {
-    const s = Math.floor((Date.now() - startTime) / 1000);
-    res.json({
-        uptime: {
-            d: Math.floor(s / 86400),
-            h: Math.floor((s % 86400) / 3600),
-            m: Math.floor((s % 3600) / 60),
-            s: s % 60
-        },
-        c1: { name: client.user ? client.user.username : "Connecting...", status: client.isReady() },
-        c2: { name: client2.user ? client2.user.username : "Connecting...", status: client2.isReady() }
-    });
-});
-
 // --- واجهة الويب الاحترافية ---
 const app = express();
 app.use(express.json());
