@@ -54,10 +54,10 @@ setInterval(() => {
 // 2) Leveling (Sphinx-run)
 // =====================
 // تم تطبيق الوقت العشوائي 12-17 ثانية هنا
-new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: getRandomTime(), type: "ar" });
-new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: getRandomTime(), type: "eng" });
-new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: getRandomTime(), type: "ar" });
-new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: getRandomTime(), type: "eng" });
+new userAccount(client, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
+new userAccount(client, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
+new userAccount(client2, Discord).leveling({ channel: CH_AR, randomLetters: false, time: 12000, type: "ar" });
+new userAccount(client2, Discord).leveling({ channel: CH_EN, randomLetters: false, time: 12000, type: "eng" });
 
 // =====================
 // 3) Counting & Watchdog Update
