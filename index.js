@@ -193,7 +193,7 @@ function requireAdminKey(req, res, next) {
 }
 
 // =====================
-// Read Key (Protect /api/data + /api/health)
+// Read Key (Protect /api/data + /api/health ONLY)
 // =====================
 function requireReadKey(req, res, next) {
   const readKey = process.env.READ_KEY;
@@ -215,17 +215,13 @@ function requireReadKey(req, res, next) {
 }
 
 // =====================
-// Protected Read Endpoints (READ_KEY REQUIRED)
+// Helper: build data payload once
 // =====================
-app.get("/api/health", requireReadKey, (req, res) => {
-  res.json({ ok: true, time: Date.now() });
-});
-
-app.get("/api/data", requireReadKey, (req, res) => {
+function buildDataPayload() {
   const s = Math.floor((Date.now() - startTime) / 1000);
   const mins = Math.max(s / 60, 1);
 
-  res.json({
+  return {
     uptime: {
       d: Math.floor(s / 86400),
       h: Math.floor((s % 86400) / 3600),
@@ -237,7 +233,25 @@ app.get("/api/data", requireReadKey, (req, res) => {
       c1: (stats.c1.total / mins).toFixed(1),
       c2: (stats.c2.total / mins).toFixed(1),
     },
-  });
+  };
+}
+
+// =====================
+// Protected Read Endpoints (READ_KEY REQUIRED)
+// =====================
+app.get("/api/health", requireReadKey, (req, res) => {
+  res.json({ ok: true, time: Date.now() });
+});
+
+app.get("/api/data", requireReadKey, (req, res) => {
+  res.json(buildDataPayload());
+});
+
+// =====================
+// Public Endpoint for Website ONLY (NO PASSWORD)
+// =====================
+app.get("/api/public-data", (req, res) => {
+  res.json(buildDataPayload());
 });
 
 // =====================
@@ -270,7 +284,7 @@ app.post("/api/restart", requireAdminKey, async (req, res) => {
 });
 
 // =====================
-// Dashboard Page (OPEN)
+// Dashboard Page (OPEN) - NO READ_KEY REQUIRED
 // =====================
 app.get("/", (req, res) => {
   res.send(`
@@ -314,38 +328,27 @@ app.get("/", (req, res) => {
             padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2);
             background: rgba(0,0,0,0.25); color: #fff; outline: none;
           }
-          .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-          .hint { font-size: 0.75rem; opacity: 0.6; margin-top: 6px; }
       </style>
   </head>
   <body>
       <div class="glass">
           <div style="font-size: 0.75rem; letter-spacing: 5px; opacity: 0.4; margin-bottom: 10px;">SYSTEM LIVE MONITOR</div>
-          <div class="uptime" id="uptime">LOCKED</div>
+          <div class="uptime" id="uptime">0d 0h 0m 0s</div>
 
           <div class="grid">
               <div class="card">
                   <div class="acc-name" id="n1">ACCOUNT 1</div>
-                  <div class="count" id="t1">-</div>
-                  <div class="metrics">AR: <b id="a1">-</b> | EN: <b id="e1">-</b></div>
+                  <div class="count" id="t1">0</div>
+                  <div class="metrics">AR: <b id="a1">0</b> | EN: <b id="e1">0</b></div>
               </div>
               <div class="card">
                   <div class="acc-name" id="n2">ACCOUNT 2</div>
-                  <div class="count" id="t2">-</div>
-                  <div class="metrics">AR: <b id="a2">-</b> | EN: <b id="e2">-</b></div>
+                  <div class="count" id="t2">0</div>
+                  <div class="metrics">AR: <b id="a2">0</b> | EN: <b id="e2">0</b></div>
               </div>
           </div>
 
           <div class="admin">
-            <div style="margin-bottom:8px;">Read Key (required to view data)</div>
-            <div class="row">
-              <input id="readkey" type="password" placeholder="Enter READ_KEY" style="width: 320px; max-width: 90%;" />
-              <button class="btn" style="padding: 12px 18px; border-radius: 14px;" onclick="saveKeys()">Save</button>
-            </div>
-            <div class="hint">* بدون READ_KEY لن يتم عرض /api/data و /api/health</div>
-          </div>
-
-          <div class="admin" style="margin-top:14px;">
             <div style="margin-bottom:8px;">Admin Key (required for Reset/Restart)</div>
             <input id="adminkey" type="password" placeholder="Enter ADMIN_KEY" style="width: 320px; max-width: 90%;" />
           </div>
@@ -357,16 +360,6 @@ app.get("/", (req, res) => {
       </div>
 
       <script>
-        // Persist keys locally in browser (optional)
-        const rk = localStorage.getItem("READ_KEY") || "";
-        if (rk) document.getElementById("readkey").value = rk;
-
-        function saveKeys() {
-          const readKey = document.getElementById("readkey").value || "";
-          localStorage.setItem("READ_KEY", readKey);
-          location.reload();
-        }
-
         async function act(type) {
           try {
             if (!confirm("Are you sure?")) return;
@@ -389,23 +382,11 @@ app.get("/", (req, res) => {
           } catch (e) { alert("Error"); }
         }
 
-        async function loadData() {
+        setInterval(async () => {
           try {
-            const readKey = document.getElementById("readkey").value || "";
-            if (!readKey) {
-              document.getElementById('uptime').innerText = "LOCKED";
-              return;
-            }
-
-            const r = await fetch('/api/data', {
-              headers: { 'x-read-key': readKey }
-            });
-
-            if(!r.ok) {
-              document.getElementById('uptime').innerText = "LOCKED";
-              return;
-            }
-
+            // IMPORTANT: dashboard uses public-data (no password)
+            const r = await fetch('/api/public-data');
+            if(!r.ok) return;
             const d = await r.json();
 
             document.getElementById('uptime').innerText =
@@ -420,14 +401,8 @@ app.get("/", (req, res) => {
             document.getElementById('t2').innerText = d.stats.c2.total;
             document.getElementById('a2').innerText = d.stats.c2.ar;
             document.getElementById('e2').innerText = d.stats.c2.en;
-          } catch(e){
-            document.getElementById('uptime').innerText = "LOCKED";
-          }
-        }
-
-        // initial + interval
-        loadData();
-        setInterval(loadData, 1500);
+          } catch(e){}
+        }, 1500);
       </script>
   </body>
   </html>
