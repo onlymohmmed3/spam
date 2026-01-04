@@ -133,11 +133,11 @@ client.login(process.env.token);
 client2.login(process.env.token2);
 
 // =====================
-// 4) Web Server (🔥 Strong Security)
+// 4) Web Server (✅ Fixed Security + Working Reset/Restart)
 // =====================
 const app = express();
 
-// خلف Cloudflare/Render: مفيد لقراءة IP الحقيقي لو احتجته
+// خلف Cloudflare/Render
 app.set("trust proxy", 1);
 
 // أساسيات
@@ -150,8 +150,6 @@ app.disable("x-powered-by");
 // هيدرز أمنية
 app.use(
   helmet({
-    // لأنك تستخدم inline script/style في HTML، نترك CSP off لتفادي كسر الصفحة
-    // إذا تبي CSP قوي، نعدله مع nonce.
     contentSecurityPolicy: false,
   })
 );
@@ -175,13 +173,16 @@ const strictLimiter = rateLimit({
   legacyHeaders: false,
 });
 app.use("/api/reset", strictLimiter);
-app.use("/api/restart", rateLimit({ windowMs: 60 * 1000, max: 2, standardHeaders: true, legacyHeaders: false }));
+app.use(
+  "/api/restart",
+  rateLimit({ windowMs: 60 * 1000, max: 2, standardHeaders: true, legacyHeaders: false })
+);
 
 // =====================
 // 4.1) Auth Layers
 // =====================
 
-// (A) Basic Auth على كل الموقع
+// (A) Basic Auth على الداشبورد + /api
 function basicAuth(req, res, next) {
   const user = process.env.DASH_USER;
   const pass = process.env.DASH_PASS;
@@ -203,7 +204,6 @@ function basicAuth(req, res, next) {
   const u = decoded.slice(0, idx);
   const p = decoded.slice(idx + 1);
 
-  // timing-safe compare (منع تسريبات زمنية)
   try {
     const okU =
       Buffer.byteLength(u) === Buffer.byteLength(user) &&
@@ -222,48 +222,18 @@ function basicAuth(req, res, next) {
 // حط ALLOW_IPS="1.2.3.4,5.6.7.8"
 function ipAllowlist(req, res, next) {
   const raw = process.env.ALLOW_IPS;
-  if (!raw) return next(); // غير مفعل
-  const allow = raw.split(",").map((x) => x.trim()).filter(Boolean);
-  const ip = req.ip;
+  if (!raw) return next();
+
+  const allow = raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  // ملاحظة: على Render ممكن يجي IPv6/::ffff:
+  const ip = (req.ip || "").replace("::ffff:", "");
 
   if (allow.includes(ip)) return next();
   return res.status(403).send("IP not allowed");
-}
-
-// فعّل الاثنين على كامل الموقع
-app.use(basicAuth);
-app.use(ipAllowlist);
-
-// (C) CSRF token للطلبات POST
-function ensureCsrf(req, res, next) {
-  let token = req.cookies?.csrf;
-  if (!token) {
-    token = crypto.randomBytes(24).toString("hex");
-    res.cookie("csrf", token, {
-      httpOnly: true,
-      sameSite: "Strict",
-      secure: true, // Render على https
-    });
-  }
-  next();
-}
-app.use(ensureCsrf);
-
-function requireCsrf(req, res, next) {
-  const cookieToken = req.cookies?.csrf;
-  const headerToken = req.headers["x-csrf-token"];
-  if (!cookieToken || !headerToken) return res.status(401).json({ success: false, error: "Missing CSRF token" });
-
-  try {
-    const ok =
-      Buffer.byteLength(cookieToken) === Buffer.byteLength(headerToken) &&
-      crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken));
-    if (!ok) return res.status(403).json({ success: false, error: "Bad CSRF token" });
-  } catch {
-    return res.status(403).json({ success: false, error: "Bad CSRF token" });
-  }
-
-  next();
 }
 
 // (D) Admin Key إضافية للـ reset/restart (طبقة ثانية)
@@ -286,9 +256,18 @@ function requireAdminKey(req, res, next) {
   next();
 }
 
+// فعّل الحماية على الداشبورد والـ API
+app.use("/", basicAuth, ipAllowlist);
+app.use("/api", basicAuth, ipAllowlist);
+
 // =====================
 // 4.2) API Routes (Protected)
 // =====================
+
+app.get("/api/health", (req, res) => {
+  // endpoint بسيط للـ cron-job.org (اختياري)
+  res.json({ ok: true, time: Date.now() });
+});
 
 app.get("/api/data", (req, res) => {
   const s = Math.floor((Date.now() - startTime) / 1000);
@@ -309,13 +288,13 @@ app.get("/api/data", (req, res) => {
   });
 });
 
-app.post("/api/reset", requireCsrf, requireAdminKey, (req, res) => {
+app.post("/api/reset", requireAdminKey, (req, res) => {
   stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0 };
   stats.c2 = { ...stats.c2, total: 0, ar: 0, en: 0 };
   res.json({ success: true });
 });
 
-app.post("/api/restart", requireCsrf, requireAdminKey, async (req, res) => {
+app.post("/api/restart", requireAdminKey, async (req, res) => {
   const key = process.env.RENDER_API_KEY;
   const id = process.env.SERVICE_ID;
 
@@ -331,7 +310,7 @@ app.post("/api/restart", requireCsrf, requireAdminKey, async (req, res) => {
     );
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e?.message || String(e) });
   }
 });
 
@@ -344,7 +323,7 @@ app.get("/", (req, res) => {
   <html lang="en">
   <head>
       <meta charset="UTF-8">
-      <title>SPAM PRO | ELITE DASHBOARD</title>
+      <title>ELITE DASHBOARD</title>
       <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
           * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -421,11 +400,6 @@ app.get("/", (req, res) => {
       </div>
 
       <script>
-        function getCookie(name) {
-          const m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-          return m ? decodeURIComponent(m[2]) : null;
-        }
-
         async function act(type) {
           try {
             if (!confirm("Are you sure?")) return;
@@ -433,14 +407,10 @@ app.get("/", (req, res) => {
             const adminKey = document.getElementById("adminkey").value || "";
             if (!adminKey) { alert("ADMIN_KEY required"); return; }
 
-            const csrf = getCookie("csrf");
-            if (!csrf) { alert("Missing CSRF cookie, refresh page."); return; }
-
             const response = await fetch('/api/' + type, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'x-csrf-token': csrf,
                 'x-admin-key': adminKey
               },
               body: JSON.stringify({})
@@ -449,7 +419,7 @@ app.get("/", (req, res) => {
             const result = await response.json().catch(()=> ({}));
             if (response.ok && result.success) location.reload();
             else alert(result.error || ("Failed: " + response.status));
-          } catch (e) {}
+          } catch (e) { alert("Error"); }
         }
 
         setInterval(async () => {
