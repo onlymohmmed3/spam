@@ -171,7 +171,7 @@ app.use("/api/reset", strictLimiter);
 app.use("/api/restart", rateLimit({ windowMs: 60 * 1000, max: 2, standardHeaders: true, legacyHeaders: false }));
 
 // =====================
-// 2) Admin Key (Only reset/restart)
+// Admin Key (Only reset/restart)
 // =====================
 function requireAdminKey(req, res, next) {
   const adminKey = process.env.ADMIN_KEY;
@@ -193,13 +193,35 @@ function requireAdminKey(req, res, next) {
 }
 
 // =====================
-// 3) Public Endpoints (OPEN)
+// Read Key (Protect /api/data + /api/health)
 // =====================
-app.get("/api/health", (req, res) => {
+function requireReadKey(req, res, next) {
+  const readKey = process.env.READ_KEY;
+  if (!readKey) return res.status(500).json({ ok: false, error: "READ_KEY missing" });
+
+  const k = req.headers["x-read-key"];
+  if (!k) return res.status(401).json({ ok: false, error: "Missing read key" });
+
+  try {
+    const ok =
+      Buffer.byteLength(k) === Buffer.byteLength(readKey) &&
+      crypto.timingSafeEqual(Buffer.from(k), Buffer.from(readKey));
+    if (!ok) return res.status(403).json({ ok: false, error: "Bad read key" });
+  } catch {
+    return res.status(403).json({ ok: false, error: "Bad read key" });
+  }
+
+  next();
+}
+
+// =====================
+// Protected Read Endpoints (READ_KEY REQUIRED)
+// =====================
+app.get("/api/health", requireReadKey, (req, res) => {
   res.json({ ok: true, time: Date.now() });
 });
 
-app.get("/api/data", (req, res) => {
+app.get("/api/data", requireReadKey, (req, res) => {
   const s = Math.floor((Date.now() - startTime) / 1000);
   const mins = Math.max(s / 60, 1);
 
@@ -219,7 +241,7 @@ app.get("/api/data", (req, res) => {
 });
 
 // =====================
-// 4) Protected Endpoints (ADMIN_KEY REQUIRED)
+// Protected Endpoints (ADMIN_KEY REQUIRED)
 // =====================
 app.post("/api/reset", requireAdminKey, (req, res) => {
   stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0 };
@@ -248,7 +270,7 @@ app.post("/api/restart", requireAdminKey, async (req, res) => {
 });
 
 // =====================
-// 5) Dashboard Page (OPEN)
+// Dashboard Page (OPEN)
 // =====================
 app.get("/", (req, res) => {
   res.send(`
@@ -283,7 +305,7 @@ app.get("/", (req, res) => {
           .count { font-size: 5rem; font-weight: 900; line-height: 1; }
           .metrics { display: flex; justify-content: center; gap: 15px; margin-top: 20px; font-size: 0.8rem; font-weight: bold; }
           .metrics b { color: #00ff88; }
-          .btn-group { display: flex; gap: 15px; justify-content: center; }
+          .btn-group { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
           .btn { padding: 18px 45px; border-radius: 20px; font-weight: 800; cursor: pointer; border: none; text-transform: uppercase; font-size: 0.85rem; transition: 0.3s; }
           .btn-reset { background: rgba(255,255,255,0.05); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.3); }
           .btn-restart { background: #fff; color: #000; }
@@ -292,27 +314,38 @@ app.get("/", (req, res) => {
             padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2);
             background: rgba(0,0,0,0.25); color: #fff; outline: none;
           }
+          .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+          .hint { font-size: 0.75rem; opacity: 0.6; margin-top: 6px; }
       </style>
   </head>
   <body>
       <div class="glass">
           <div style="font-size: 0.75rem; letter-spacing: 5px; opacity: 0.4; margin-bottom: 10px;">SYSTEM LIVE MONITOR</div>
-          <div class="uptime" id="uptime">0d 0h 0m 0s</div>
+          <div class="uptime" id="uptime">LOCKED</div>
 
           <div class="grid">
               <div class="card">
                   <div class="acc-name" id="n1">ACCOUNT 1</div>
-                  <div class="count" id="t1">0</div>
-                  <div class="metrics">AR: <b id="a1">0</b> | EN: <b id="e1">0</b></div>
+                  <div class="count" id="t1">-</div>
+                  <div class="metrics">AR: <b id="a1">-</b> | EN: <b id="e1">-</b></div>
               </div>
               <div class="card">
                   <div class="acc-name" id="n2">ACCOUNT 2</div>
-                  <div class="count" id="t2">0</div>
-                  <div class="metrics">AR: <b id="a2">0</b> | EN: <b id="e2">0</b></div>
+                  <div class="count" id="t2">-</div>
+                  <div class="metrics">AR: <b id="a2">-</b> | EN: <b id="e2">-</b></div>
               </div>
           </div>
 
           <div class="admin">
+            <div style="margin-bottom:8px;">Read Key (required to view data)</div>
+            <div class="row">
+              <input id="readkey" type="password" placeholder="Enter READ_KEY" style="width: 320px; max-width: 90%;" />
+              <button class="btn" style="padding: 12px 18px; border-radius: 14px;" onclick="saveKeys()">Save</button>
+            </div>
+            <div class="hint">* بدون READ_KEY لن يتم عرض /api/data و /api/health</div>
+          </div>
+
+          <div class="admin" style="margin-top:14px;">
             <div style="margin-bottom:8px;">Admin Key (required for Reset/Restart)</div>
             <input id="adminkey" type="password" placeholder="Enter ADMIN_KEY" style="width: 320px; max-width: 90%;" />
           </div>
@@ -324,6 +357,16 @@ app.get("/", (req, res) => {
       </div>
 
       <script>
+        // Persist keys locally in browser (optional)
+        const rk = localStorage.getItem("READ_KEY") || "";
+        if (rk) document.getElementById("readkey").value = rk;
+
+        function saveKeys() {
+          const readKey = document.getElementById("readkey").value || "";
+          localStorage.setItem("READ_KEY", readKey);
+          location.reload();
+        }
+
         async function act(type) {
           try {
             if (!confirm("Are you sure?")) return;
@@ -346,10 +389,23 @@ app.get("/", (req, res) => {
           } catch (e) { alert("Error"); }
         }
 
-        setInterval(async () => {
+        async function loadData() {
           try {
-            const r = await fetch('/api/data');
-            if(!r.ok) return;
+            const readKey = document.getElementById("readkey").value || "";
+            if (!readKey) {
+              document.getElementById('uptime').innerText = "LOCKED";
+              return;
+            }
+
+            const r = await fetch('/api/data', {
+              headers: { 'x-read-key': readKey }
+            });
+
+            if(!r.ok) {
+              document.getElementById('uptime').innerText = "LOCKED";
+              return;
+            }
+
             const d = await r.json();
 
             document.getElementById('uptime').innerText =
@@ -364,8 +420,14 @@ app.get("/", (req, res) => {
             document.getElementById('t2').innerText = d.stats.c2.total;
             document.getElementById('a2').innerText = d.stats.c2.ar;
             document.getElementById('e2').innerText = d.stats.c2.en;
-          } catch(e){}
-        }, 1500);
+          } catch(e){
+            document.getElementById('uptime').innerText = "LOCKED";
+          }
+        }
+
+        // initial + interval
+        loadData();
+        setInterval(loadData, 1500);
       </script>
   </body>
   </html>
