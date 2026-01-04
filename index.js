@@ -133,28 +133,23 @@ client.login(process.env.token);
 client2.login(process.env.token2);
 
 // =====================
-// 4) Web Server (✅ Fixed Security + Working Reset/Restart)
+// 5) Web Server
 // =====================
 const app = express();
-
-// خلف Cloudflare/Render
 app.set("trust proxy", 1);
 
-// أساسيات
 app.use(express.json({ limit: "100kb" }));
 app.use(cookieParser());
 
-// إخفاء البصمة
 app.disable("x-powered-by");
 
-// هيدرز أمنية
 app.use(
   helmet({
     contentSecurityPolicy: false,
   })
 );
 
-// Rate limit عام
+// Rate limit عام للـ API
 app.use(
   "/api",
   rateLimit({
@@ -173,70 +168,11 @@ const strictLimiter = rateLimit({
   legacyHeaders: false,
 });
 app.use("/api/reset", strictLimiter);
-app.use(
-  "/api/restart",
-  rateLimit({ windowMs: 60 * 1000, max: 2, standardHeaders: true, legacyHeaders: false })
-);
+app.use("/api/restart", rateLimit({ windowMs: 60 * 1000, max: 2, standardHeaders: true, legacyHeaders: false }));
 
 // =====================
-// 4.1) Auth Layers
+// 2) Admin Key (Only reset/restart)
 // =====================
-
-// (A) Basic Auth على الداشبورد + /api
-function basicAuth(req, res, next) {
-  const user = process.env.DASH_USER;
-  const pass = process.env.DASH_PASS;
-
-  if (!user || !pass) {
-    return res.status(500).send("Dashboard auth not configured (DASH_USER / DASH_PASS missing)");
-  }
-
-  const auth = req.headers.authorization || "";
-  const [type, token] = auth.split(" ");
-
-  if (type !== "Basic" || !token) {
-    res.set("WWW-Authenticate", 'Basic realm="Dashboard"');
-    return res.status(401).send("Auth required");
-  }
-
-  const decoded = Buffer.from(token, "base64").toString("utf8");
-  const idx = decoded.indexOf(":");
-  const u = decoded.slice(0, idx);
-  const p = decoded.slice(idx + 1);
-
-  try {
-    const okU =
-      Buffer.byteLength(u) === Buffer.byteLength(user) &&
-      crypto.timingSafeEqual(Buffer.from(u), Buffer.from(user));
-    const okP =
-      Buffer.byteLength(p) === Buffer.byteLength(pass) &&
-      crypto.timingSafeEqual(Buffer.from(p), Buffer.from(pass));
-
-    if (okU && okP) return next();
-  } catch {}
-
-  return res.status(403).send("Forbidden");
-}
-
-// (B) Allowlist IP (اختياري قوي جدًا)
-// حط ALLOW_IPS="1.2.3.4,5.6.7.8"
-function ipAllowlist(req, res, next) {
-  const raw = process.env.ALLOW_IPS;
-  if (!raw) return next();
-
-  const allow = raw
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-
-  // ملاحظة: على Render ممكن يجي IPv6/::ffff:
-  const ip = (req.ip || "").replace("::ffff:", "");
-
-  if (allow.includes(ip)) return next();
-  return res.status(403).send("IP not allowed");
-}
-
-// (D) Admin Key إضافية للـ reset/restart (طبقة ثانية)
 function requireAdminKey(req, res, next) {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey) return res.status(500).json({ success: false, error: "ADMIN_KEY missing" });
@@ -256,22 +192,17 @@ function requireAdminKey(req, res, next) {
   next();
 }
 
-// فعّل الحماية على الداشبورد والـ API
-app.use("/", basicAuth, ipAllowlist);
-app.use("/api", basicAuth, ipAllowlist);
-
 // =====================
-// 4.2) API Routes (Protected)
+// 3) Public Endpoints (OPEN)
 // =====================
-
 app.get("/api/health", (req, res) => {
-  // endpoint بسيط للـ cron-job.org (اختياري)
   res.json({ ok: true, time: Date.now() });
 });
 
 app.get("/api/data", (req, res) => {
   const s = Math.floor((Date.now() - startTime) / 1000);
   const mins = Math.max(s / 60, 1);
+
   res.json({
     uptime: {
       d: Math.floor(s / 86400),
@@ -279,15 +210,17 @@ app.get("/api/data", (req, res) => {
       m: Math.floor((s % 3600) / 60),
       s: s % 60,
     },
-    stats: stats,
+    stats,
     speed: {
       c1: (stats.c1.total / mins).toFixed(1),
       c2: (stats.c2.total / mins).toFixed(1),
     },
-    status: { c1: client.isReady?.() ?? false, c2: client2.isReady?.() ?? false },
   });
 });
 
+// =====================
+// 4) Protected Endpoints (ADMIN_KEY REQUIRED)
+// =====================
 app.post("/api/reset", requireAdminKey, (req, res) => {
   stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0 };
   stats.c2 = { ...stats.c2, total: 0, ar: 0, en: 0 };
@@ -315,7 +248,7 @@ app.post("/api/restart", requireAdminKey, async (req, res) => {
 });
 
 // =====================
-// 4.3) Dashboard Page
+// 5) Dashboard Page (OPEN)
 // =====================
 app.get("/", (req, res) => {
   res.send(`
@@ -346,9 +279,6 @@ app.get("/", (req, res) => {
               background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08);
               border-radius: 35px; padding: 40px 15px; transition: 0.4s; position: relative;
           }
-          .card:hover { transform: translateY(-10px); border-color: #00d4ff; background: rgba(255,255,255,0.06); }
-          .dot { position: absolute; top: 25px; right: 25px; width: 10px; height: 10px; border-radius: 50%; background: #ff4757; }
-          .online { background: #00ff88; box-shadow: 0 0 15px #00ff88; }
           .acc-name { color: #00d4ff; font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; text-transform: uppercase; }
           .count { font-size: 5rem; font-weight: 900; line-height: 1; }
           .metrics { display: flex; justify-content: center; gap: 15px; margin-top: 20px; font-size: 0.8rem; font-weight: bold; }
@@ -356,9 +286,7 @@ app.get("/", (req, res) => {
           .btn-group { display: flex; gap: 15px; justify-content: center; }
           .btn { padding: 18px 45px; border-radius: 20px; font-weight: 800; cursor: pointer; border: none; text-transform: uppercase; font-size: 0.85rem; transition: 0.3s; }
           .btn-reset { background: rgba(255,255,255,0.05); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.3); }
-          .btn-reset:hover { background: #ff4757; color: #fff; }
           .btn-restart { background: #fff; color: #000; }
-          .btn-restart:hover { background: #00d4ff; transform: scale(1.05); }
           .admin { margin-top: 18px; opacity: 0.85; font-size: 0.85rem; }
           input {
             padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2);
@@ -373,18 +301,14 @@ app.get("/", (req, res) => {
 
           <div class="grid">
               <div class="card">
-                  <div id="dot1" class="dot"></div>
                   <div class="acc-name" id="n1">ACCOUNT 1</div>
                   <div class="count" id="t1">0</div>
-                  <div class="metrics">⚡ <b id="s1">0.0</b> MSG/M | 📡 <b id="p1">0</b>ms</div>
-                  <div class="metrics" style="opacity:0.5">AR: <span id="a1">0</span> | EN: <span id="e1">0</span></div>
+                  <div class="metrics">AR: <b id="a1">0</b> | EN: <b id="e1">0</b></div>
               </div>
               <div class="card">
-                  <div id="dot2" class="dot"></div>
                   <div class="acc-name" id="n2">ACCOUNT 2</div>
                   <div class="count" id="t2">0</div>
-                  <div class="metrics">⚡ <b id="s2">0.0</b> MSG/M | 📡 <b id="p2">0</b>ms</div>
-                  <div class="metrics" style="opacity:0.5">AR: <span id="a2">0</span> | EN: <span id="e2">0</span></div>
+                  <div class="metrics">AR: <b id="a2">0</b> | EN: <b id="e2">0</b></div>
               </div>
           </div>
 
@@ -431,16 +355,15 @@ app.get("/", (req, res) => {
             document.getElementById('uptime').innerText =
               d.uptime.d+"d "+d.uptime.h+"h "+d.uptime.m+"m "+d.uptime.s+"s";
 
-            ['c1','c2'].forEach((k,i)=>{
-              const n = i+1;
-              document.getElementById('n'+n).innerText = d.stats[k].name;
-              document.getElementById('t'+n).innerText = d.stats[k].total;
-              document.getElementById('a'+n).innerText = d.stats[k].ar;
-              document.getElementById('e'+n).innerText = d.stats[k].en;
-              document.getElementById('s'+n).innerText = d.speed[k];
-              document.getElementById('p'+n).innerText = d.stats[k].ping;
-              document.getElementById('dot'+n).className = d.status[k] ? "dot online" : "dot";
-            });
+            document.getElementById('n1').innerText = d.stats.c1.name;
+            document.getElementById('t1').innerText = d.stats.c1.total;
+            document.getElementById('a1').innerText = d.stats.c1.ar;
+            document.getElementById('e1').innerText = d.stats.c1.en;
+
+            document.getElementById('n2').innerText = d.stats.c2.name;
+            document.getElementById('t2').innerText = d.stats.c2.total;
+            document.getElementById('a2').innerText = d.stats.c2.ar;
+            document.getElementById('e2').innerText = d.stats.c2.en;
           } catch(e){}
         }, 1500);
       </script>
@@ -450,7 +373,7 @@ app.get("/", (req, res) => {
 });
 
 // =====================
-// 5) Start Server
+// 6) Start Server
 // =====================
 const PORT = process.env.PORT || 2000;
 app.listen(PORT, () => console.log(`Web server running on port ${PORT}`));
