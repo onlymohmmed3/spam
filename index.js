@@ -56,28 +56,14 @@ let lastChangeTimes = {
   c2_en: Date.now(),
 };
 
-const client = new Discord.Client({
-  checkUpdate: false,
-  ws: { properties: { browser: "Discord Client" } }
-});
-
-const client2 = new Discord.Client({
-  checkUpdate: false,
-  ws: { properties: { browser: "Discord Client" } }
-});
+const client = new Discord.Client();
+const client2 = new Discord.Client();
 
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
-const levelingActive = {
-  c1_ar: false,
-  c1_en: false,
-  c2_ar: false,
-  c2_en: false
-};
-
 // =====================
-// WEBSOCKET
+// WEBSOCKET FOR REAL-TIME UPDATES
 // =====================
 let wss;
 function broadcast(data) {
@@ -90,7 +76,72 @@ function broadcast(data) {
 }
 
 // =====================
-// MESSAGE TRACKING
+// DISCORD CLIENTS SETUP
+// =====================
+client.on("ready", async () => {
+  console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`);
+  stats.c1.name = client.user.username;
+  stats.c1.status = "online";
+  broadcast({ type: "status", account: "c1", status: "online" });
+});
+
+client2.on("ready", async () => {
+  console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`);
+  stats.c2.name = client2.user.username;
+  stats.c2.status = "online";
+  broadcast({ type: "status", account: "c2", status: "online" });
+});
+
+// Error handling
+client.on("error", (err) => {
+  stats.c1.errors++;
+  systemHealth.errors.push({ time: Date.now(), account: "c1", error: err.message });
+  if (systemHealth.errors.length > 50) systemHealth.errors.shift();
+});
+
+client2.on("error", (err) => {
+  stats.c2.errors++;
+  systemHealth.errors.push({ time: Date.now(), account: "c2", error: err.message });
+  if (systemHealth.errors.length > 50) systemHealth.errors.shift();
+});
+
+// Ping monitoring
+setInterval(() => {
+  stats.c1.ping = client.ws?.ping ?? stats.c1.ping;
+  stats.c2.ping = client2.ws?.ping ?? stats.c2.ping;
+  broadcast({ type: "ping", c1: stats.c1.ping, c2: stats.c2.ping });
+}, 3000);
+
+// =====================
+// LEVELING SYSTEM
+// =====================
+new userAccount(client, Discord).leveling({ 
+  channel: CH_AR, 
+  randomLetters: false, 
+  time: 12000, 
+  type: "ar" 
+});
+new userAccount(client, Discord).leveling({ 
+  channel: CH_EN, 
+  randomLetters: false, 
+  time: 12000, 
+  type: "eng" 
+});
+new userAccount(client2, Discord).leveling({ 
+  channel: CH_AR, 
+  randomLetters: false, 
+  time: 12000, 
+  type: "ar" 
+});
+new userAccount(client2, Discord).leveling({ 
+  channel: CH_EN, 
+  randomLetters: false, 
+  time: 12000, 
+  type: "eng" 
+});
+
+// =====================
+// ADVANCED COUNTING SYSTEM
 // =====================
 function bumpCounters(acc, channelId) {
   stats[acc].total += 1;
@@ -99,194 +150,53 @@ function bumpCounters(acc, channelId) {
   if (channelId === CH_AR) {
     stats[acc].ar += 1;
     lastChangeTimes[`${acc}_ar`] = Date.now();
-    console.log(`✅ [${acc.toUpperCase()}] Arabic message #${stats[acc].ar} sent`);
   }
   if (channelId === CH_EN) {
     stats[acc].en += 1;
     lastChangeTimes[`${acc}_en`] = Date.now();
-    console.log(`✅ [${acc.toUpperCase()}] English message #${stats[acc].en} sent`);
   }
 
+  // Calculate average speed
   const uptime = (Date.now() - startTime) / 1000 / 60;
   stats[acc].avgSpeed = (stats[acc].total / Math.max(uptime, 1)).toFixed(2);
 
+  // Broadcast real-time update
   broadcast({ 
     type: "update", 
     account: acc, 
     stats: stats[acc] 
   });
-  
-  console.log(`📊 [${acc.toUpperCase()}] Total: ${stats[acc].total} | AR: ${stats[acc].ar} | EN: ${stats[acc].en} | Speed: ${stats[acc].avgSpeed}/min`);
 }
-
-// =====================
-// CLIENT 1
-// =====================
-client.once("ready", async () => {
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║  ✓ ACCOUNT 1: ${client.user.username} ONLINE          
-╚═══════════════════════════════════════════════════════════╝
-  `);
-  
-  stats.c1.name = client.user.username;
-  stats.c1.status = "online";
-  
-  setTimeout(() => {
-    try {
-      console.log("🚀 [CLIENT 1] Starting leveling systems...");
-      
-      new userAccount(client, Discord).leveling({ 
-        channel: CH_AR, 
-        randomLetters: false, 
-        time: 12000, 
-        type: "ar" 
-      });
-      levelingActive.c1_ar = true;
-      console.log("✓ [CLIENT 1] Arabic channel activated");
-      
-      new userAccount(client, Discord).leveling({ 
-        channel: CH_EN, 
-        randomLetters: false, 
-        time: 12000, 
-        type: "eng" 
-      });
-      levelingActive.c1_en = true;
-      console.log("✓ [CLIENT 1] English channel activated");
-      
-    } catch (error) {
-      console.error("❌ [CLIENT 1] Leveling failed:", error.message);
-      stats.c1.status = "error";
-    }
-  }, 3000);
-  
-  broadcast({ type: "status", account: "c1", status: "online" });
-});
 
 client.on("messageCreate", (msg) => {
   try {
-    if (msg?.author?.id === client.user?.id) {
-      const channelId = msg.channel?.id;
-      console.log(`📨 [CLIENT 1] Message detected in channel: ${channelId}`);
-      bumpCounters("c1", channelId);
-    }
-  } catch (e) {
-    console.error("❌ [CLIENT 1] Message error:", e.message);
-  }
-});
-
-client.on("error", (err) => {
-  console.error("❌ [CLIENT 1 ERROR]:", err.message);
-  stats.c1.errors++;
-  stats.c1.status = "error";
-  systemHealth.errors.push({ time: Date.now(), account: "c1", error: err.message });
-  if (systemHealth.errors.length > 50) systemHealth.errors.shift();
-  broadcast({ type: "error", account: "c1", message: err.message });
-});
-
-client.on("disconnect", () => {
-  console.log("⚠️  [CLIENT 1] Disconnected");
-  stats.c1.status = "disconnected";
-  broadcast({ type: "status", account: "c1", status: "disconnected" });
-});
-
-// =====================
-// CLIENT 2
-// =====================
-client2.once("ready", async () => {
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║  ✓ ACCOUNT 2: ${client2.user.username} ONLINE          
-╚═══════════════════════════════════════════════════════════╝
-  `);
-  
-  stats.c2.name = client2.user.username;
-  stats.c2.status = "online";
-  
-  setTimeout(() => {
-    try {
-      console.log("🚀 [CLIENT 2] Starting leveling systems...");
-      
-      new userAccount(client2, Discord).leveling({ 
-        channel: CH_AR, 
-        randomLetters: false, 
-        time: 12000, 
-        type: "ar" 
-      });
-      levelingActive.c2_ar = true;
-      console.log("✓ [CLIENT 2] Arabic channel activated");
-      
-      new userAccount(client2, Discord).leveling({ 
-        channel: CH_EN, 
-        randomLetters: false, 
-        time: 12000, 
-        type: "eng" 
-      });
-      levelingActive.c2_en = true;
-      console.log("✓ [CLIENT 2] English channel activated");
-      
-    } catch (error) {
-      console.error("❌ [CLIENT 2] Leveling failed:", error.message);
-      stats.c2.status = "error";
-    }
-  }, 3000);
-  
-  broadcast({ type: "status", account: "c2", status: "online" });
+    if (msg?.author?.id === client.user?.id) bumpCounters("c1", msg.channel?.id);
+  } catch {}
 });
 
 client2.on("messageCreate", (msg) => {
   try {
-    if (msg?.author?.id === client2.user?.id) {
-      const channelId = msg.channel?.id;
-      console.log(`📨 [CLIENT 2] Message detected in channel: ${channelId}`);
-      bumpCounters("c2", channelId);
-    }
-  } catch (e) {
-    console.error("❌ [CLIENT 2] Message error:", e.message);
-  }
-});
-
-client2.on("error", (err) => {
-  console.error("❌ [CLIENT 2 ERROR]:", err.message);
-  stats.c2.errors++;
-  stats.c2.status = "error";
-  systemHealth.errors.push({ time: Date.now(), account: "c2", error: err.message });
-  if (systemHealth.errors.length > 50) systemHealth.errors.shift();
-  broadcast({ type: "error", account: "c2", message: err.message });
-});
-
-client2.on("disconnect", () => {
-  console.log("⚠️  [CLIENT 2] Disconnected");
-  stats.c2.status = "disconnected";
-  broadcast({ type: "status", account: "c2", status: "disconnected" });
+    if (msg?.author?.id === client2.user?.id) bumpCounters("c2", msg.channel?.id);
+  } catch {}
 });
 
 // =====================
-// PING MONITORING
-// =====================
-setInterval(() => {
-  stats.c1.ping = client.ws?.ping ?? stats.c1.ping;
-  stats.c2.ping = client2.ws?.ping ?? stats.c2.ping;
-  broadcast({ type: "ping", c1: stats.c1.ping, c2: stats.c2.ping });
-}, 3000);
-
-// =====================
-// WATCHDOG
+// INTELLIGENT WATCHDOG SYSTEM
 // =====================
 setInterval(async () => {
   const now = Date.now();
   const limit = 5 * 60 * 1000;
 
   const streams = [
-    { n: "Acc1 AR", t: lastChangeTimes.c1_ar, active: levelingActive.c1_ar },
-    { n: "Acc1 EN", t: lastChangeTimes.c1_en, active: levelingActive.c1_en },
-    { n: "Acc2 AR", t: lastChangeTimes.c2_ar, active: levelingActive.c2_ar },
-    { n: "Acc2 EN", t: lastChangeTimes.c2_en, active: levelingActive.c2_en },
+    { n: "Acc1 AR", t: lastChangeTimes.c1_ar },
+    { n: "Acc1 EN", t: lastChangeTimes.c1_en },
+    { n: "Acc2 AR", t: lastChangeTimes.c2_ar },
+    { n: "Acc2 EN", t: lastChangeTimes.c2_en },
   ];
 
   for (const s of streams) {
-    if (s.active && now - s.t > limit) {
-      console.log(`⚠️  [WATCHDOG] Stream ${s.n} stuck! Triggering restart...`);
+    if (now - s.t > limit) {
+      console.log(`[WATCHDOG] Stream ${s.n} stuck! Triggering restart...`);
       systemHealth.watchdogTriggers++;
       broadcast({ type: "watchdog", stream: s.n });
       return await triggerRestart();
@@ -298,10 +208,7 @@ async function triggerRestart() {
   const key = process.env.RENDER_API_KEY;
   const id = process.env.SERVICE_ID;
 
-  if (!key || !id) {
-    console.log("⚠️  [WATCHDOG] Missing API credentials");
-    return;
-  }
+  if (!key || !id) return;
 
   try {
     await axios.post(
@@ -315,46 +222,40 @@ async function triggerRestart() {
 
     const delay = Date.now() + 600000;
     lastChangeTimes = { c1_ar: delay, c1_en: delay, c2_ar: delay, c2_en: delay };
-    
-    console.log("✓ [WATCHDOG] Restart triggered");
   } catch (e) {
-    console.error("❌ [WATCHDOG] Restart error:", e?.message || e);
+    console.error("Auto-Restart Error:", e?.message || e);
   }
 }
 
-// =====================
-// LOGIN
-// =====================
-console.log("\n🔐 [SYSTEM] Logging in to Discord...\n");
-
-client.login(process.env.token).catch(err => {
-  console.error("❌ [CRITICAL] Client 1 login failed:", err.message);
-  console.error("💡 [HELP] Check your 'token' in .env file");
-  process.exit(1);
-});
-
-client2.login(process.env.token2).catch(err => {
-  console.error("❌ [CRITICAL] Client 2 login failed:", err.message);
-  console.error("💡 [HELP] Check your 'token2' in .env file");
-  process.exit(1);
-});
+client.login(process.env.token);
+client2.login(process.env.token2);
 
 // =====================
-// EXPRESS SERVER
+// EXPRESS SERVER SETUP
 // =====================
 const app = express();
 app.set("trust proxy", 1);
+
 app.use(express.json({ limit: "100kb" }));
 app.use(cookieParser());
 app.disable("x-powered-by");
-app.use(helmet({ contentSecurityPolicy: false }));
 
-app.use("/api", rateLimit({
-  windowMs: 60 * 1000,
-  max: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+  })
+);
+
+// Rate limiting
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
 
 const strictLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -372,7 +273,7 @@ app.use("/api/restart", rateLimit({
 }));
 
 // =====================
-// AUTH MIDDLEWARE
+// AUTHENTICATION MIDDLEWARE
 // =====================
 function requireAdminKey(req, res, next) {
   const adminKey = process.env.ADMIN_KEY;
@@ -382,7 +283,8 @@ function requireAdminKey(req, res, next) {
   if (!k) return res.status(401).json({ success: false, error: "Missing admin key" });
 
   try {
-    const ok = Buffer.byteLength(k) === Buffer.byteLength(adminKey) &&
+    const ok =
+      Buffer.byteLength(k) === Buffer.byteLength(adminKey) &&
       crypto.timingSafeEqual(Buffer.from(k), Buffer.from(adminKey));
     if (!ok) return res.status(403).json({ success: false, error: "Invalid admin key" });
   } catch {
@@ -400,7 +302,8 @@ function requireReadKey(req, res, next) {
   if (!k) return res.status(401).json({ ok: false, error: "Missing read key" });
 
   try {
-    const ok = Buffer.byteLength(k) === Buffer.byteLength(readKey) &&
+    const ok =
+      Buffer.byteLength(k) === Buffer.byteLength(readKey) &&
       crypto.timingSafeEqual(Buffer.from(k), Buffer.from(readKey));
     if (!ok) return res.status(403).json({ ok: false, error: "Invalid read key" });
   } catch {
@@ -411,7 +314,7 @@ function requireReadKey(req, res, next) {
 }
 
 // =====================
-// DATA BUILDER
+// DATA PAYLOAD BUILDER
 // =====================
 function buildDataPayload() {
   const s = Math.floor((Date.now() - startTime) / 1000);
@@ -431,7 +334,6 @@ function buildDataPayload() {
       c2: (stats.c2.total / mins).toFixed(1),
     },
     health: systemHealth,
-    levelingActive,
     timestamp: Date.now(),
   };
 }
@@ -455,7 +357,6 @@ app.get("/api/public-data", (req, res) => {
 });
 
 app.post("/api/reset", requireAdminKey, (req, res) => {
-  console.log("🔄 [API] Reset triggered");
   stats.c1 = { ...stats.c1, total: 0, ar: 0, en: 0, errors: 0, hourlyRate: [] };
   stats.c2 = { ...stats.c2, total: 0, ar: 0, en: 0, errors: 0, hourlyRate: [] };
   broadcast({ type: "reset" });
@@ -474,7 +375,6 @@ app.post("/api/restart", requireAdminKey, async (req, res) => {
   }
 
   try {
-    console.log("🔄 [API] Manual restart triggered");
     await axios.post(
       `https://api.render.com/v1/services/${id}/restart`,
       {},
@@ -489,7 +389,7 @@ app.post("/api/restart", requireAdminKey, async (req, res) => {
 });
 
 // =====================
-// DASHBOARD
+// ULTRA-ADVANCED DASHBOARD
 // =====================
 app.get("/", (req, res) => {
   res.send(`
@@ -508,6 +408,9 @@ app.get("/", (req, res) => {
             --primary: #00ff88;
             --secondary: #00d4ff;
             --danger: #ff4757;
+            --dark: #0a0a1f;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glow: 0 0 30px rgba(0, 255, 136, 0.3);
         }
         
         body {
@@ -515,17 +418,54 @@ app.get("/", (req, res) => {
             background: linear-gradient(135deg, #0a0a1f 0%, #1a0a2e 50%, #0a0a1f 100%);
             font-family: 'Inter', sans-serif;
             color: #fff;
+            overflow-x: hidden;
+            position: relative;
         }
         
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .particle {
+            position: absolute;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: float 20s infinite;
+            opacity: 0.1;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(100px, -100px) scale(1.2); }
+            66% { transform: translate(-100px, 100px) scale(0.8); }
+        }
+        
+        /* Container */
         .container {
+            position: relative;
+            z-index: 1;
             max-width: 1800px;
             margin: 0 auto;
             padding: 30px 20px;
         }
         
+        /* Header */
         .header {
             text-align: center;
             margin-bottom: 40px;
+            animation: slideDown 0.8s ease;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-50px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .logo {
@@ -536,7 +476,14 @@ app.get("/", (req, res) => {
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: 5px;
+            text-shadow: var(--glow);
             margin-bottom: 10px;
+            animation: glow 2s ease-in-out infinite;
+        }
+        
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
         }
         
         .subtitle {
@@ -546,6 +493,7 @@ app.get("/", (req, res) => {
             text-transform: uppercase;
         }
         
+        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -554,12 +502,37 @@ app.get("/", (req, res) => {
         }
         
         .stat-card {
-            background: rgba(255, 255, 255, 0.03);
+            background: var(--glass);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 25px;
             padding: 30px;
-            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeIn 0.6s ease backwards;
+        }
+        
+        .stat-card:nth-child(1) { animation-delay: 0.1s; }
+        .stat-card:nth-child(2) { animation-delay: 0.2s; }
+        .stat-card:nth-child(3) { animation-delay: 0.3s; }
+        .stat-card:nth-child(4) { animation-delay: 0.4s; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            transform: scaleX(0);
+            transition: transform 0.4s ease;
         }
         
         .stat-card:hover {
@@ -568,12 +541,32 @@ app.get("/", (req, res) => {
             border-color: rgba(0, 255, 136, 0.3);
         }
         
+        .stat-card:hover::before {
+            transform: scaleX(1);
+        }
+        
         .stat-label {
             font-size: 0.75rem;
             letter-spacing: 2px;
             opacity: 0.7;
             text-transform: uppercase;
             margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--primary);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
         }
         
         .stat-value {
@@ -594,23 +587,32 @@ app.get("/", (req, res) => {
             opacity: 0.8;
         }
         
+        .stat-details span {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
         .stat-details b {
             color: var(--primary);
             font-size: 1.2rem;
         }
         
+        /* Main Grid */
         .main-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 30px;
+            margin-bottom: 40px;
         }
         
         .panel {
-            background: rgba(255, 255, 255, 0.03);
+            background: var(--glass);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 30px;
             padding: 35px;
+            animation: fadeIn 0.8s ease backwards;
         }
         
         .panel-title {
@@ -618,6 +620,9 @@ app.get("/", (req, res) => {
             font-size: 1.3rem;
             font-weight: 700;
             margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
             color: var(--primary);
         }
         
@@ -666,6 +671,7 @@ app.get("/", (req, res) => {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 15px;
+            margin-bottom: 15px;
         }
         
         .metric {
@@ -690,10 +696,40 @@ app.get("/", (req, res) => {
             color: var(--primary);
         }
         
+        /* Progress Bar */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 15px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -100% 0; }
+            100% { background-position: 100% 0; }
+        }
+        
+        /* Control Panel */
         .controls {
             display: flex;
             flex-direction: column;
             gap: 20px;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
         
         .input-group label {
@@ -701,8 +737,6 @@ app.get("/", (req, res) => {
             opacity: 0.8;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-bottom: 10px;
-            display: block;
         }
         
         input[type="password"] {
@@ -739,6 +773,31 @@ app.get("/", (req, res) => {
             letter-spacing: 2px;
             cursor: pointer;
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .btn span {
+            position: relative;
+            z-index: 1;
         }
         
         .btn-reset {
@@ -761,10 +820,10 @@ app.get("/", (req, res) => {
             transform: translateY(-2px);
         }
         
+        /* System Health */
         .health-grid {
             display: grid;
             gap: 15px;
-            margin-top: 30px;
         }
         
         .health-item {
@@ -789,11 +848,20 @@ app.get("/", (req, res) => {
             color: var(--primary);
         }
         
+        /* Responsive */
+        @media (max-width: 768px) {
+            .logo { font-size: 2rem; }
+            .stat-value { font-size: 2.5rem; }
+            .main-grid { grid-template-columns: 1fr; }
+            .btn-group { grid-template-columns: 1fr; }
+        }
+        
+        /* Notification */
         .notification {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: rgba(255, 255, 255, 0.03);
+            background: var(--glass);
             backdrop-filter: blur(20px);
             border: 1px solid var(--primary);
             border-radius: 15px;
@@ -809,25 +877,26 @@ app.get("/", (req, res) => {
             from { transform: translateX(400px); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
-        
-        @media (max-width: 768px) {
-            .logo { font-size: 2rem; }
-            .stat-value { font-size: 2.5rem; }
-            .main-grid { grid-template-columns: 1fr; }
-            .btn-group { grid-template-columns: 1fr; }
-        }
     </style>
 </head>
 <body>
+    <!-- Animated Background -->
+    <div class="bg-animation" id="particles"></div>
+
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <div class="logo">ELITE CONTROL</div>
             <div class="subtitle">Advanced Discord Automation System 2026</div>
         </div>
 
+        <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-label">SYSTEM UPTIME</div>
+                <div class="stat-label">
+                    <span class="status-dot"></span>
+                    SYSTEM UPTIME
+                </div>
                 <div class="stat-value" id="uptime">0d 0h 0m</div>
             </div>
 
@@ -858,10 +927,18 @@ app.get("/", (req, res) => {
             </div>
         </div>
 
+        <!-- Main Grid -->
         <div class="main-grid">
+            <!-- Accounts Panel -->
             <div class="panel">
-                <div class="panel-title">ACCOUNTS STATUS</div>
+                <div class="panel-title">
+                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    </svg>
+                    ACCOUNTS STATUS
+                </div>
                 <div class="account-grid">
+                    <!-- Account 1 -->
                     <div class="account-item">
                         <div class="account-header">
                             <div class="account-name" id="n1">ACCOUNT 1</div>
@@ -881,8 +958,12 @@ app.get("/", (req, res) => {
                                 <div class="metric-value" id="en1">0</div>
                             </div>
                         </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="prog1" style="width: 0%"></div>
+                        </div>
                     </div>
 
+                    <!-- Account 2 -->
                     <div class="account-item">
                         <div class="account-header">
                             <div class="account-name" id="n2">ACCOUNT 2</div>
@@ -902,12 +983,21 @@ app.get("/", (req, res) => {
                                 <div class="metric-value" id="en2">0</div>
                             </div>
                         </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="prog2" style="width: 0%"></div>
+                        </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Control Panel -->
             <div class="panel">
-                <div class="panel-title">CONTROL CENTER</div>
+                <div class="panel-title">
+                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                    </svg>
+                    CONTROL CENTER
+                </div>
                 <div class="controls">
                     <div class="input-group">
                         <label>ADMIN KEY</label>
@@ -915,10 +1005,23 @@ app.get("/", (req, res) => {
                     </div>
                     
                     <div class="btn-group">
-                        <button class="btn btn-reset" onclick="executeAction('reset')">RESET DATA</button>
-                        <button class="btn btn-restart" onclick="executeAction('restart')">RESTART SYSTEM</button>
+                        <button class="btn btn-reset" onclick="executeAction('reset')">
+                            <span>RESET DATA</span>
+                        </button>
+                        <button class="btn btn-restart" onclick="executeAction('restart')">
+                            <span>RESTART SYSTEM</span>
+                        </button>
                     </div>
+                </div>
 
+                <!-- System Health -->
+                <div style="margin-top: 30px;">
+                    <div class="panel-title" style="font-size: 1rem; margin-bottom: 15px;">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        SYSTEM METRICS
+                    </div>
                     <div class="health-grid">
                         <div class="health-item">
                             <span class="health-label">API Calls</span>
@@ -939,8 +1042,24 @@ app.get("/", (req, res) => {
     </div>
 
     <script>
-        let lastUpdateTime = Date.now();
-        
+        // Particle Animation
+        function createParticles() {
+            const container = document.getElementById('particles');
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.width = Math.random() * 6 + 2 + 'px';
+                particle.style.height = particle.style.width;
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                particle.style.animationDuration = Math.random() * 10 + 15 + 's';
+                particle.style.animationDelay = Math.random() * 5 + 's';
+                container.appendChild(particle);
+            }
+        }
+        createParticles();
+
+        // Notification System
         function showNotification(message, type = 'success') {
             const notif = document.createElement('div');
             notif.className = 'notification';
@@ -954,6 +1073,7 @@ app.get("/", (req, res) => {
             }, 3000);
         }
 
+        // Execute Actions
         async function executeAction(type) {
             const adminKey = document.getElementById('adminkey').value.trim();
             
@@ -991,6 +1111,9 @@ app.get("/", (req, res) => {
             }
         }
 
+        // Data Update System
+        let lastUpdateTime = Date.now();
+        
         async function updateData() {
             try {
                 const response = await fetch('/api/public-data');
@@ -999,17 +1122,22 @@ app.get("/", (req, res) => {
                 const data = await response.json();
                 lastUpdateTime = Date.now();
 
+                // Update uptime
                 const u = data.uptime;
-                document.getElementById('uptime').textContent = \`\${u.d}d \${u.h}h \${u.m}m\`;
+                document.getElementById('uptime').textContent = 
+                    \`\${u.d}d \${u.h}h \${u.m}m\`;
 
+                // Update total messages
                 const total = data.stats.c1.total + data.stats.c2.total;
                 document.getElementById('totalMsg').textContent = total.toLocaleString();
                 document.getElementById('t1').textContent = data.stats.c1.total.toLocaleString();
                 document.getElementById('t2').textContent = data.stats.c2.total.toLocaleString();
 
+                // Update speed
                 const avgSpeed = ((parseFloat(data.speed.c1) + parseFloat(data.speed.c2)) / 2).toFixed(1);
                 document.getElementById('avgSpeed').textContent = avgSpeed;
 
+                // Update health
                 const errorCount = data.stats.c1.errors + data.stats.c2.errors;
                 document.getElementById('errors').textContent = errorCount;
                 document.getElementById('restarts').textContent = data.health.totalRestarts;
@@ -1017,11 +1145,18 @@ app.get("/", (req, res) => {
                 const healthPercent = Math.max(0, 100 - (errorCount * 2));
                 document.getElementById('healthStatus').textContent = healthPercent + '%';
 
+                // Update accounts
                 updateAccount(1, data.stats.c1);
                 updateAccount(2, data.stats.c2);
 
+                // Update system metrics
                 document.getElementById('apiCalls').textContent = data.health.apiCalls.toLocaleString();
                 document.getElementById('watchdog').textContent = data.health.watchdogTriggers;
+
+                // Update last update time
+                const timeDiff = Math.floor((Date.now() - lastUpdateTime) / 1000);
+                document.getElementById('lastUpdate').textContent = 
+                    timeDiff < 5 ? 'Just now' : \`\${timeDiff}s ago\`;
 
             } catch (e) {
                 console.error('Update error:', e);
@@ -1034,11 +1169,19 @@ app.get("/", (req, res) => {
             document.getElementById(\`total\${num}\`).textContent = stats.total.toLocaleString();
             document.getElementById(\`ar\${num}\`).textContent = stats.ar.toLocaleString();
             document.getElementById(\`en\${num}\`).textContent = stats.en.toLocaleString();
+            
+            // Update progress bar
+            const total = stats.total;
+            const maxVal = Math.max(stats.ar, stats.en, 1);
+            const percentage = Math.min((total / (maxVal * 10)) * 100, 100);
+            document.getElementById(\`prog\${num}\`).style.width = percentage + '%';
         }
 
+        // Initial update and interval
         updateData();
         setInterval(updateData, 1500);
         
+        // Update "last update" text every second
         setInterval(() => {
             const timeDiff = Math.floor((Date.now() - lastUpdateTime) / 1000);
             document.getElementById('lastUpdate').textContent = 
@@ -1051,64 +1194,31 @@ app.get("/", (req, res) => {
 });
 
 // =====================
-// START SERVER
+// START SERVER & WEBSOCKET
 // =====================
 const PORT = process.env.PORT || 2000;
 const server = app.listen(PORT, () => {
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║        🚀 ELITE DISCORD LEVELING SYSTEM 2026             ║
-║        Advanced Automation & Control Center               ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
-
-✓ Web Server: http://localhost:${PORT}
-✓ Dashboard: http://localhost:${PORT}
-✓ API: http://localhost:${PORT}/api/public-data
-
-📍 AR Channel: ${CH_AR}
-📍 EN Channel: ${CH_EN}
-⏱️  Message Interval: 12 seconds
-
-⏳ Waiting for Discord connections...
-  `);
+  console.log(`[SYSTEM] Elite Control Center running on port ${PORT}`);
+  console.log(`[SYSTEM] Dashboard: http://localhost:${PORT}`);
 });
 
-// WebSocket
+// WebSocket Server
 wss = new WebSocket.Server({ server });
 
 wss.on("connection", (ws) => {
-  console.log("🔌 [WS] Client connected");
+  console.log("[WS] Client connected");
   
+  // Send initial data
   ws.send(JSON.stringify({ 
     type: "init", 
-    data: buildDataPayload(),
-    levelingStatus: levelingActive
+    data: buildDataPayload() 
   }));
 
   ws.on("close", () => {
-    console.log("🔌 [WS] Client disconnected");
-  });
-
-  ws.on("error", (err) => {
-    console.error("❌ [WS ERROR]:", err.message);
+    console.log("[WS] Client disconnected");
   });
 });
 
-// Status Log
-setInterval(() => {
-  const uptime = Math.floor((Date.now() - startTime) / 1000 / 60);
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║ STATUS UPDATE - Uptime: ${uptime} minutes
-╠═══════════════════════════════════════════════════════════╣
-║ Account 1: ${stats.c1.total} msgs (AR: ${stats.c1.ar} | EN: ${stats.c1.en}) | ${stats.c1.status}
-║ Account 2: ${stats.c2.total} msgs (AR: ${stats.c2.ar} | EN: ${stats.c2.en}) | ${stats.c2.status}
-║ Total: ${stats.c1.total + stats.c2.total} messages
-║ Errors: ${systemHealth.errors.length}
-╚═══════════════════════════════════════════════════════════╝
-  `);
-}, 30000);
-
-console.log("\n✨ [SYSTEM] All systems initialized. Ready!\n");
+console.log("[SYSTEM] Elite Discord Leveling System 2026 - ONLINE");
+console.log("[SYSTEM] Developed for professional automation");
+console.log("[SYSTEM] All systems operational ✓");
