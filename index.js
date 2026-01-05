@@ -89,13 +89,6 @@ function broadcast(data) {
 // =====================
 // LEVELING SYSTEM WITH ERROR HANDLING
 // =====================
-let levelingActive = {
-  c1_ar: false,
-  c1_en: false,
-  c2_ar: false,
-  c2_en: false
-};
-
 // Wait for clients to be ready before starting leveling
 client.once("ready", async () => {
   console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`);
