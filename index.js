@@ -82,6 +82,15 @@ client.on("ready", async () => {
   console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`);
   stats.c1.name = client.user.username;
   stats.c1.status = "online";
+  
+  // Test message to confirm connection
+  try {
+    const channel = await client.channels.fetch(CH_AR);
+    if (channel) console.log(`[SYSTEM] Connected to AR channel`);
+  } catch (e) {
+    console.error(`[ERROR] Cannot access AR channel:`, e.message);
+  }
+  
   broadcast({ type: "status", account: "c1", status: "online" });
 });
 
@@ -89,20 +98,48 @@ client2.on("ready", async () => {
   console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`);
   stats.c2.name = client2.user.username;
   stats.c2.status = "online";
+  
+  // Test message to confirm connection
+  try {
+    const channel = await client2.channels.fetch(CH_AR);
+    if (channel) console.log(`[SYSTEM] Connected to AR channel`);
+  } catch (e) {
+    console.error(`[ERROR] Cannot access AR channel:`, e.message);
+  }
+  
   broadcast({ type: "status", account: "c2", status: "online" });
 });
 
-// Error handling
+// Error handling with logging
 client.on("error", (err) => {
+  console.error("[CLIENT 1 ERROR]:", err.message);
   stats.c1.errors++;
+  stats.c1.status = "error";
   systemHealth.errors.push({ time: Date.now(), account: "c1", error: err.message });
   if (systemHealth.errors.length > 50) systemHealth.errors.shift();
+  broadcast({ type: "error", account: "c1", message: err.message });
 });
 
 client2.on("error", (err) => {
+  console.error("[CLIENT 2 ERROR]:", err.message);
   stats.c2.errors++;
+  stats.c2.status = "error";
   systemHealth.errors.push({ time: Date.now(), account: "c2", error: err.message });
   if (systemHealth.errors.length > 50) systemHealth.errors.shift();
+  broadcast({ type: "error", account: "c2", message: err.message });
+});
+
+// Connection status monitoring
+client.on("disconnect", () => {
+  console.log("[CLIENT 1] Disconnected");
+  stats.c1.status = "disconnected";
+  broadcast({ type: "status", account: "c1", status: "disconnected" });
+});
+
+client2.on("disconnect", () => {
+  console.log("[CLIENT 2] Disconnected");
+  stats.c2.status = "disconnected";
+  broadcast({ type: "status", account: "c2", status: "disconnected" });
 });
 
 // Ping monitoring
@@ -113,32 +150,47 @@ setInterval(() => {
 }, 3000);
 
 // =====================
-// LEVELING SYSTEM
+// LEVELING SYSTEM WITH ERROR HANDLING
 // =====================
-new userAccount(client, Discord).leveling({ 
-  channel: CH_AR, 
-  randomLetters: false, 
-  time: 12000, 
-  type: "ar" 
-});
-new userAccount(client, Discord).leveling({ 
-  channel: CH_EN, 
-  randomLetters: false, 
-  time: 12000, 
-  type: "eng" 
-});
-new userAccount(client2, Discord).leveling({ 
-  channel: CH_AR, 
-  randomLetters: false, 
-  time: 12000, 
-  type: "ar" 
-});
-new userAccount(client2, Discord).leveling({ 
-  channel: CH_EN, 
-  randomLetters: false, 
-  time: 12000, 
-  type: "eng" 
-});
+try {
+  console.log("[SYSTEM] Initializing leveling system...");
+  
+  new userAccount(client, Discord).leveling({ 
+    channel: CH_AR, 
+    randomLetters: false, 
+    time: 12000, 
+    type: "ar" 
+  });
+  console.log("[SYSTEM] Client 1 - AR channel initialized");
+  
+  new userAccount(client, Discord).leveling({ 
+    channel: CH_EN, 
+    randomLetters: false, 
+    time: 12000, 
+    type: "eng" 
+  });
+  console.log("[SYSTEM] Client 1 - EN channel initialized");
+  
+  new userAccount(client2, Discord).leveling({ 
+    channel: CH_AR, 
+    randomLetters: false, 
+    time: 12000, 
+    type: "ar" 
+  });
+  console.log("[SYSTEM] Client 2 - AR channel initialized");
+  
+  new userAccount(client2, Discord).leveling({ 
+    channel: CH_EN, 
+    randomLetters: false, 
+    time: 12000, 
+    type: "eng" 
+  });
+  console.log("[SYSTEM] Client 2 - EN channel initialized");
+  
+} catch (error) {
+  console.error("[CRITICAL] Leveling system initialization failed:", error.message);
+  console.error("[CRITICAL] Make sure sphinx-run is installed: npm install sphinx-run");
+}
 
 // =====================
 // ADVANCED COUNTING SYSTEM
@@ -170,14 +222,24 @@ function bumpCounters(acc, channelId) {
 
 client.on("messageCreate", (msg) => {
   try {
-    if (msg?.author?.id === client.user?.id) bumpCounters("c1", msg.channel?.id);
-  } catch {}
+    if (msg?.author?.id === client.user?.id) {
+      bumpCounters("c1", msg.channel?.id);
+      console.log(`[C1] Message sent in channel ${msg.channel?.id}`);
+    }
+  } catch (e) {
+    console.error("[C1 MESSAGE ERROR]:", e.message);
+  }
 });
 
 client2.on("messageCreate", (msg) => {
   try {
-    if (msg?.author?.id === client2.user?.id) bumpCounters("c2", msg.channel?.id);
-  } catch {}
+    if (msg?.author?.id === client2.user?.id) {
+      bumpCounters("c2", msg.channel?.id);
+      console.log(`[C2] Message sent in channel ${msg.channel?.id}`);
+    }
+  } catch (e) {
+    console.error("[C2 MESSAGE ERROR]:", e.message);
+  }
 });
 
 // =====================
@@ -227,8 +289,15 @@ async function triggerRestart() {
   }
 }
 
-client.login(process.env.token);
-client2.login(process.env.token2);
+client.login(process.env.token).catch(err => {
+  console.error("[CRITICAL] Client 1 login failed:", err.message);
+  console.error("[HELP] Check your token in .env file");
+});
+
+client2.login(process.env.token2).catch(err => {
+  console.error("[CRITICAL] Client 2 login failed:", err.message);
+  console.error("[HELP] Check your token2 in .env file");
+});
 
 // =====================
 // EXPRESS SERVER SETUP
@@ -1275,7 +1344,10 @@ app.get("/", (req, res) => {
         async function updateData() {
             try {
                 const response = await fetch('/api/public-data');
-                if (!response.ok) return;
+                if (!response.ok) {
+                    console.error('Failed to fetch data:', response.status);
+                    return;
+                }
                 
                 const data = await response.json();
                 lastUpdateTime = Date.now();
