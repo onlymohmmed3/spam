@@ -78,34 +78,85 @@ function broadcast(data) {
 // =====================
 // DISCORD CLIENTS SETUP
 // =====================
-client.on("ready", async () => {
+// =====================
+// LEVELING SYSTEM WITH ERROR HANDLING
+// =====================
+let levelingActive = {
+  c1_ar: false,
+  c1_en: false,
+  c2_ar: false,
+  c2_en: false
+};
+
+// Wait for clients to be ready before starting leveling
+client.once("ready", async () => {
   console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`);
   stats.c1.name = client.user.username;
   stats.c1.status = "online";
   
-  // Test message to confirm connection
-  try {
-    const channel = await client.channels.fetch(CH_AR);
-    if (channel) console.log(`[SYSTEM] Connected to AR channel`);
-  } catch (e) {
-    console.error(`[ERROR] Cannot access AR channel:`, e.message);
-  }
+  // Wait 3 seconds then start leveling
+  setTimeout(() => {
+    try {
+      console.log("[LEVELING] Starting Account 1 leveling systems...");
+      
+      new userAccount(client, Discord).leveling({ 
+        channel: CH_AR, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "ar" 
+      });
+      levelingActive.c1_ar = true;
+      console.log("[✓] Client 1 - AR channel active");
+      
+      new userAccount(client, Discord).leveling({ 
+        channel: CH_EN, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "eng" 
+      });
+      levelingActive.c1_en = true;
+      console.log("[✓] Client 1 - EN channel active");
+      
+    } catch (error) {
+      console.error("[✗] Account 1 leveling failed:", error.message);
+    }
+  }, 3000);
   
   broadcast({ type: "status", account: "c1", status: "online" });
 });
 
-client2.on("ready", async () => {
+client2.once("ready", async () => {
   console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`);
   stats.c2.name = client2.user.username;
   stats.c2.status = "online";
   
-  // Test message to confirm connection
-  try {
-    const channel = await client2.channels.fetch(CH_AR);
-    if (channel) console.log(`[SYSTEM] Connected to AR channel`);
-  } catch (e) {
-    console.error(`[ERROR] Cannot access AR channel:`, e.message);
-  }
+  // Wait 3 seconds then start leveling
+  setTimeout(() => {
+    try {
+      console.log("[LEVELING] Starting Account 2 leveling systems...");
+      
+      new userAccount(client2, Discord).leveling({ 
+        channel: CH_AR, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "ar" 
+      });
+      levelingActive.c2_ar = true;
+      console.log("[✓] Client 2 - AR channel active");
+      
+      new userAccount(client2, Discord).leveling({ 
+        channel: CH_EN, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "eng" 
+      });
+      levelingActive.c2_en = true;
+      console.log("[✓] Client 2 - EN channel active");
+      
+    } catch (error) {
+      console.error("[✗] Account 2 leveling failed:", error.message);
+    }
+  }, 3000);
   
   broadcast({ type: "status", account: "c2", status: "online" });
 });
@@ -152,49 +203,124 @@ setInterval(() => {
 // =====================
 // LEVELING SYSTEM WITH ERROR HANDLING
 // =====================
-try {
-  console.log("[SYSTEM] Initializing leveling system...");
-  
-  new userAccount(client, Discord).leveling({ 
-    channel: CH_AR, 
-    randomLetters: false, 
-    time: 12000, 
-    type: "ar" 
-  });
-  console.log("[SYSTEM] Client 1 - AR channel initialized");
-  
-  new userAccount(client, Discord).leveling({ 
-    channel: CH_EN, 
-    randomLetters: false, 
-    time: 12000, 
-    type: "eng" 
-  });
-  console.log("[SYSTEM] Client 1 - EN channel initialized");
-  
-  new userAccount(client2, Discord).leveling({ 
-    channel: CH_AR, 
-    randomLetters: false, 
-    time: 12000, 
-    type: "ar" 
-  });
-  console.log("[SYSTEM] Client 2 - AR channel initialized");
-  
-  new userAccount(client2, Discord).leveling({ 
-    channel: CH_EN, 
-    randomLetters: false, 
-    time: 12000, 
-    type: "eng" 
-  });
-  console.log("[SYSTEM] Client 2 - EN channel initialized");
-  
-} catch (error) {
-  console.error("[CRITICAL] Leveling system initialization failed:", error.message);
-  console.error("[CRITICAL] Make sure sphinx-run is installed: npm install sphinx-run");
-}
+let levelingActive = {
+  c1_ar: false,
+  c1_en: false,
+  c2_ar: false,
+  c2_en: false
+};
 
-// =====================
-// ADVANCED COUNTING SYSTEM
-// =====================
+// Wait for clients to be ready before starting leveling
+client.once("ready", async () => {
+  console.log(`[SYSTEM] Account 1: ${client.user.username} is ONLINE`);
+  stats.c1.name = client.user.username;
+  stats.c1.status = "online";
+  
+  // Wait 3 seconds then start leveling
+  setTimeout(() => {
+    try {
+      console.log("[LEVELING] Starting Account 1 leveling systems...");
+      
+      new userAccount(client, Discord).leveling({ 
+        channel: CH_AR, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "ar" 
+      });
+      levelingActive.c1_ar = true;
+      console.log("[✓] Client 1 - AR channel active");
+      
+      new userAccount(client, Discord).leveling({ 
+        channel: CH_EN, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "eng" 
+      });
+      levelingActive.c1_en = true;
+      console.log("[✓] Client 1 - EN channel active");
+      
+    } catch (error) {
+      console.error("[✗] Account 1 leveling failed:", error.message);
+    }
+  }, 3000);
+  
+  broadcast({ type: "status", account: "c1", status: "online" });
+});
+
+client2.once("ready", async () => {
+  console.log(`[SYSTEM] Account 2: ${client2.user.username} is ONLINE`);
+  stats.c2.name = client2.user.username;
+  stats.c2.status = "online";
+  
+  // Wait 3 seconds then start leveling
+  setTimeout(() => {
+    try {
+      console.log("[LEVELING] Starting Account 2 leveling systems...");
+      
+      new userAccount(client2, Discord).leveling({ 
+        channel: CH_AR, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "ar" 
+      });
+      levelingActive.c2_ar = true;
+      console.log("[✓] Client 2 - AR channel active");
+      
+      new userAccount(client2, Discord).leveling({ 
+        channel: CH_EN, 
+        randomLetters: false, 
+        time: 12000, 
+        type: "eng" 
+      });
+      levelingActive.c2_en = true;
+      console.log("[✓] Client 2 - EN channel active");
+      
+    } catch (error) {
+      console.error("[✗] Account 2 leveling failed:", error.message);
+    }
+  }, 3000);
+  
+  broadcast({ type: "status", account: "c2", status: "online" });
+});
+
+// Error handling with logging
+client.on("error", (err) => {
+  console.error("[CLIENT 1 ERROR]:", err.message);
+  stats.c1.errors++;
+  stats.c1.status = "error";
+  systemHealth.errors.push({ time: Date.now(), account: "c1", error: err.message });
+  if (systemHealth.errors.length > 50) systemHealth.errors.shift();
+  broadcast({ type: "error", account: "c1", message: err.message });
+});
+
+client2.on("error", (err) => {
+  console.error("[CLIENT 2 ERROR]:", err.message);
+  stats.c2.errors++;
+  stats.c2.status = "error";
+  systemHealth.errors.push({ time: Date.now(), account: "c2", error: err.message });
+  if (systemHealth.errors.length > 50) systemHealth.errors.shift();
+  broadcast({ type: "error", account: "c2", message: err.message });
+});
+
+// Connection status monitoring
+client.on("disconnect", () => {
+  console.log("[CLIENT 1] Disconnected");
+  stats.c1.status = "disconnected";
+  broadcast({ type: "status", account: "c1", status: "disconnected" });
+});
+
+client2.on("disconnect", () => {
+  console.log("[CLIENT 2] Disconnected");
+  stats.c2.status = "disconnected";
+  broadcast({ type: "status", account: "c2", status: "disconnected" });
+});
+
+// Ping monitoring
+setInterval(() => {
+  stats.c1.ping = client.ws?.ping ?? stats.c1.ping;
+  stats.c2.ping = client2.ws?.ping ?? stats.c2.ping;
+  broadcast({ type: "ping", c1: stats.c1.ping, c2: stats.c2.ping });
+}, 3000);
 function bumpCounters(acc, channelId) {
   stats[acc].total += 1;
   stats[acc].lastMsg = Date.now();
@@ -1459,27 +1585,65 @@ app.get("/", (req, res) => {
 // =====================
 const PORT = process.env.PORT || 2000;
 const server = app.listen(PORT, () => {
-  console.log(`[SYSTEM] Elite Control Center running on port ${PORT}`);
-  console.log(`[SYSTEM] Dashboard: http://localhost:${PORT}`);
+  console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║        ELITE DISCORD LEVELING SYSTEM 2026 🚀             ║
+║        Advanced Automation & Control Center               ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+
+[✓] Web Server: http://localhost:${PORT}
+[✓] Dashboard: http://localhost:${PORT}
+[✓] API Endpoint: http://localhost:${PORT}/api/public-data
+[✓] WebSocket: Ready for real-time updates
+
+[INFO] AR Channel: ${CH_AR}
+[INFO] EN Channel: ${CH_EN}
+[INFO] Message Interval: 12 seconds
+
+[WAITING] Connecting Discord clients...
+  `);
 });
 
 // WebSocket Server
 wss = new WebSocket.Server({ server });
 
+let wsClients = 0;
+
 wss.on("connection", (ws) => {
-  console.log("[WS] Client connected");
+  wsClients++;
+  console.log(`[WS] Client connected | Total clients: ${wsClients}`);
   
   // Send initial data
   ws.send(JSON.stringify({ 
     type: "init", 
-    data: buildDataPayload() 
+    data: buildDataPayload(),
+    levelingStatus: levelingActive
   }));
 
   ws.on("close", () => {
-    console.log("[WS] Client disconnected");
+    wsClients--;
+    console.log(`[WS] Client disconnected | Total clients: ${wsClients}`);
+  });
+
+  ws.on("error", (err) => {
+    console.error("[WS ERROR]:", err.message);
   });
 });
 
-console.log("[SYSTEM] Elite Discord Leveling System 2026 - ONLINE");
-console.log("[SYSTEM] Developed for professional automation");
-console.log("[SYSTEM] All systems operational ✓");
+// Log system status every 30 seconds
+setInterval(() => {
+  console.log(`
+[STATUS UPDATE]
+├─ Uptime: ${Math.floor((Date.now() - startTime) / 1000 / 60)} minutes
+├─ Account 1: ${stats.c1.total} messages (AR: ${stats.c1.ar} | EN: ${stats.c1.en}) | Status: ${stats.c1.status}
+├─ Account 2: ${stats.c2.total} messages (AR: ${stats.c2.ar} | EN: ${stats.c2.en}) | Status: ${stats.c2.status}
+├─ Total Messages: ${stats.c1.total + stats.c2.total}
+├─ WebSocket Clients: ${wsClients}
+├─ Leveling Status: C1_AR=${levelingActive.c1_ar} C1_EN=${levelingActive.c1_en} C2_AR=${levelingActive.c2_ar} C2_EN=${levelingActive.c2_en}
+└─ System Health: ${systemHealth.errors.length} errors logged
+  `);
+}, 30000);
+
+console.log("\n[SYSTEM] All systems initialized. Waiting for Discord connection...");
