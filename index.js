@@ -62,6 +62,14 @@ const client2 = new Discord.Client();
 const CH_AR = "1261662361660555315";
 const CH_EN = "1246427655855804477";
 
+// Leveling status tracker
+const levelingActive = {
+  c1_ar: false,
+  c1_en: false,
+  c2_ar: false,
+  c2_en: false
+};
+
 // =====================
 // WEBSOCKET FOR REAL-TIME UPDATES
 // =====================
