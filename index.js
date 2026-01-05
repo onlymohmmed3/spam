@@ -1005,13 +1005,26 @@ app.get("/", (req, res) => {
                     </div>
                     
                     <div class="btn-group">
-                        <button class="btn btn-reset" onclick="executeAction('reset')">
+                        <button class="btn btn-reset" onclick="executeAction('reset')" onmouseenter="playSound('hover')">
                             <span>RESET DATA</span>
                         </button>
-                        <button class="btn btn-restart" onclick="executeAction('restart')">
+                        <button class="btn btn-restart" onclick="executeAction('restart')" onmouseenter="playSound('hover')">
                             <span>RESTART SYSTEM</span>
                         </button>
                     </div>
+
+                    <!-- Sound Toggle Button -->
+                    <button id="soundToggle" onclick="toggleSound()" class="btn" style="
+                        margin-top: 15px;
+                        background: rgba(255, 255, 255, 0.05);
+                        color: var(--primary);
+                        border: 1px solid var(--primary);
+                        grid-column: 1 / -1;
+                        padding: 12px;
+                        font-size: 0.8rem;
+                    " onmouseenter="playSound('hover')">
+                        🔊 SOUND ON
+                    </button>
                 </div>
 
                 <!-- System Health -->
@@ -1042,6 +1055,135 @@ app.get("/", (req, res) => {
     </div>
 
     <script>
+        // =====================
+        // ADVANCED SOUND SYSTEM
+        // =====================
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        
+        // Sound Library
+        const sounds = {
+            // UI Sounds
+            hover: { freq: 800, duration: 0.05, type: 'sine', volume: 0.1 },
+            click: { freq: 1200, duration: 0.08, type: 'sine', volume: 0.15 },
+            success: { freq: 600, duration: 0.2, type: 'sine', volume: 0.2 },
+            error: { freq: 200, duration: 0.3, type: 'sawtooth', volume: 0.15 },
+            notification: { freq: 880, duration: 0.15, type: 'sine', volume: 0.2 },
+            
+            // System Sounds
+            startup: { freq: 440, duration: 0.5, type: 'sine', volume: 0.25 },
+            update: { freq: 1000, duration: 0.03, type: 'sine', volume: 0.08 },
+            restart: { freq: 300, duration: 0.4, type: 'triangle', volume: 0.2 },
+            reset: { freq: 400, duration: 0.35, type: 'square', volume: 0.18 },
+            
+            // Achievement Sounds
+            milestone: { freq: 523, duration: 0.3, type: 'sine', volume: 0.22 },
+            levelUp: { freq: 659, duration: 0.25, type: 'sine', volume: 0.2 }
+        };
+
+        // Play Sound Function
+        function playSound(soundName) {
+            if (!sounds[soundName]) return;
+            
+            try {
+                const sound = sounds[soundName];
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.type = sound.type;
+                oscillator.frequency.value = sound.freq;
+                
+                gainNode.gain.setValueAtTime(sound.volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + sound.duration);
+                
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + sound.duration);
+            } catch (e) {
+                console.log('Audio error:', e);
+            }
+        }
+
+        // Advanced Sound Effects
+        function playSuccessChord() {
+            [523.25, 659.25, 783.99].forEach((freq, i) => {
+                setTimeout(() => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.frequency.value = freq;
+                    osc.type = 'sine';
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.3);
+                }, i * 80);
+            });
+        }
+
+        function playErrorBuzz() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+
+        function playStartupSequence() {
+            [261.63, 329.63, 392, 523.25].forEach((freq, i) => {
+                setTimeout(() => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.frequency.value = freq;
+                    osc.type = 'sine';
+                    gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                }, i * 100);
+            });
+        }
+
+        // Sound Settings
+        let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+        
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            localStorage.setItem('soundEnabled', soundEnabled);
+            playSound(soundEnabled ? 'success' : 'click');
+            updateSoundButton();
+        }
+
+        function updateSoundButton() {
+            const btn = document.getElementById('soundToggle');
+            if (btn) {
+                btn.innerHTML = soundEnabled ? '🔊 SOUND ON' : '🔇 SOUND OFF';
+                btn.style.opacity = soundEnabled ? '1' : '0.5';
+            }
+        }
+
+        // Wrap playSound to check if enabled
+        const originalPlaySound = playSound;
+        playSound = function(soundName) {
+            if (soundEnabled) originalPlaySound(soundName);
+        };
+
+        // Play startup sound
+        setTimeout(() => {
+            if (soundEnabled) playStartupSequence();
+        }, 500);
+
         // Particle Animation
         function createParticles() {
             const container = document.getElementById('particles');
@@ -1059,7 +1201,7 @@ app.get("/", (req, res) => {
         }
         createParticles();
 
-        // Notification System
+        // Notification System with Sound
         function showNotification(message, type = 'success') {
             const notif = document.createElement('div');
             notif.className = 'notification';
@@ -1067,14 +1209,23 @@ app.get("/", (req, res) => {
             notif.style.borderColor = type === 'success' ? 'var(--primary)' : 'var(--danger)';
             document.body.appendChild(notif);
             
+            // Play notification sound
+            if (type === 'success') {
+                playSuccessChord();
+            } else {
+                playErrorBuzz();
+            }
+            
             setTimeout(() => {
                 notif.style.animation = 'slideIn 0.5s ease reverse';
                 setTimeout(() => notif.remove(), 500);
             }, 3000);
         }
 
-        // Execute Actions
+        // Execute Actions with Sounds
         async function executeAction(type) {
+            playSound('click');
+            
             const adminKey = document.getElementById('adminkey').value.trim();
             
             if (!adminKey) {
@@ -1082,7 +1233,12 @@ app.get("/", (req, res) => {
                 return;
             }
             
-            if (!confirm(\`Are you sure you want to \${type} the system?\`)) return;
+            if (!confirm(\`Are you sure you want to \${type} the system?\`)) {
+                playSound('click');
+                return;
+            }
+
+            playSound(type); // Play reset or restart sound
 
             try {
                 const response = await fetch(\`/api/\${type}\`, {
@@ -1111,8 +1267,10 @@ app.get("/", (req, res) => {
             }
         }
 
-        // Data Update System
+        // Data Update System with Sound Feedback
         let lastUpdateTime = Date.now();
+        let lastTotalMessages = 0;
+        let milestones = [100, 500, 1000, 5000, 10000, 50000, 100000];
         
         async function updateData() {
             try {
@@ -1121,6 +1279,23 @@ app.get("/", (req, res) => {
                 
                 const data = await response.json();
                 lastUpdateTime = Date.now();
+
+                // Play update tick sound (subtle)
+                playSound('update');
+
+                // Check for milestones
+                const total = data.stats.c1.total + data.stats.c2.total;
+                if (total > lastTotalMessages) {
+                    milestones.forEach(milestone => {
+                        if (lastTotalMessages < milestone && total >= milestone) {
+                            setTimeout(() => {
+                                playSound('milestone');
+                                showNotification(\`🎉 Milestone reached: \${milestone.toLocaleString()} messages!\`, 'success');
+                            }, 500);
+                        }
+                    });
+                }
+                lastTotalMessages = total;
 
                 // Update uptime
                 const u = data.uptime;
@@ -1180,6 +1355,20 @@ app.get("/", (req, res) => {
         // Initial update and interval
         updateData();
         setInterval(updateData, 1500);
+        
+        // Update sound button state
+        updateSoundButton();
+        
+        // Add hover sounds to all interactive elements
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.stat-card, .account-item, input').forEach(el => {
+                el.addEventListener('mouseenter', () => playSound('hover'));
+            });
+            
+            document.querySelectorAll('input').forEach(input => {
+                input.addEventListener('focus', () => playSound('click'));
+            });
+        });
         
         // Update "last update" text every second
         setInterval(() => {
