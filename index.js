@@ -49,14 +49,14 @@ const { userAccount } = require("sphinx-run");
 new userAccount(client, Discord).leveling({
   channel: "1261662361660555315",
   randomLetters: false,
-  time: 12000,
+  time: 13000,
   type: "ar",
 });
 
 new userAccount(client, Discord).leveling({
   channel: "1246427655855804477",
   randomLetters: false,
-  time: 12000,
+  time: 13000,
   type: "eng",
 });
 
@@ -64,14 +64,14 @@ new userAccount(client, Discord).leveling({
 new userAccount(client2, Discord).leveling({
   channel: "1261662361660555315",
   randomLetters: false,
-  time: 12000,
+  time: 13000,
   type: "ar",
 });
 
 new userAccount(client2, Discord).leveling({
   channel: "1246427655855804477",
   randomLetters: false,
-  time: 12000,
+  time: 13000,
   type: "eng",
 });
 
