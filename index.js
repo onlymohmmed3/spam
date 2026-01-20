@@ -25,6 +25,11 @@ const restartJob = schedule.scheduleJob('0 * * * *', async function() {
 
 const Discord = require("discord.js-selfbot-v13");
 
+// ===== تسجيل الدخول =====
+client.login(process.env.token1);
+client2.login(process.env.token2);
+
+
 // ===== الحساب الأول =====
 const client = new Discord.Client({
   intents: [Discord.Intents.FLAGS.GUILDS],
@@ -74,10 +79,6 @@ new userAccount(client2, Discord).leveling({
   time: 13000,
   type: "eng",
 });
-
-// ===== تسجيل الدخول =====
-client.login(process.env.token);
-client2.login(process.env.token2);
 
 const express = require("express");
 const app = express();
